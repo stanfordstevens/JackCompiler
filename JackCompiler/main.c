@@ -71,6 +71,7 @@ int main(int argc, const char * argv[]) {
                 size_t entry_length = strlen(entry_path) + 1;
                 files[new_index] = malloc(entry_length);
                 strcpy(files[new_index], entry_path);
+                free(entry_path);
             }
             
             closedir(directory);
@@ -81,26 +82,51 @@ int main(int argc, const char * argv[]) {
         strcpy(files[0], filepath);
     }
     
+    free(filepath);
+    
     if (number_of_files == 0) {
         printf("No virtual machine files found\n");
         return 1;
     }
 
     for (int i = 0; i < number_of_files; i++) {
-        char *filepath = files[i];
+        //set up input file for reading
+        char *inputPath = files[i];
+        FILE *inputFile = fopen(inputPath, "r");
         
-        //initialize output file
-        char outputPath[strlen(filepath) + 1];
-        strcpy(outputPath, filepath);
-        char *loc = strrchr(outputPath, '.') + 1;
+        //set up output file for writing
+        char outputPath[strlen(inputPath) + 1];
+        strcpy(outputPath, inputPath);
+        char *loc = strrchr(outputPath, '.');
         *(loc) = 0;
-        strcat(outputPath, "vm");
+        strcat(outputPath, "_test.xml"); //test files already have an xml file, must add '_test' to each file to distinguish
         FILE *outputFile = fopen(outputPath, "w");
         
-        //TODO: add tokenizer and parser for each file
+        free(inputPath);
+        
+        char line[256];
+        while (fgets(line, sizeof(line), inputFile)) {
+            char *trimmed = trim_whitespace(line);
+            
+            if ((trimmed[0] == '/' && (trimmed[1] == '/' || trimmed[1] == '*')) || trimmed[0] == '*' ||
+                isspace(trimmed[0]) || strcmp(trimmed, "") == 0 || strcmp(trimmed, "\r\n") == 0) { continue; }
+            
+            static const char *delimeter = " ";
+            char *token = strtok(trimmed, delimeter);
+            
+            while (token != NULL) {
+                //TODO: need to further tokenize based on symbols that may be in the token, like '.' or '('
+                fprintf(outputFile, "%s\n", token);
+                
+                token = strtok(NULL, delimeter);
+            }
+            
+        }
         
         fclose(outputFile);
     }
+    
+    free(files);
     
     return 0;
 }
