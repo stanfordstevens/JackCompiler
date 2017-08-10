@@ -129,13 +129,23 @@ int main(int argc, const char * argv[]) {
                     if (previous != '\n') {
                         fputc('\n', outputFile);
                     }
-                    fputc(c, outputFile);
+                    
+                    if (c == '<') {
+                        fputs("&lt;", outputFile);
+                    } else if (c == '>') {
+                        fputs("&gt;", outputFile);
+                    } else if (c == '&') {
+                        fputs("&amp;", outputFile);
+                    } else {
+                        fputc(c, outputFile);
+                    }
+                    
                     fputc('\n', outputFile);
                 } else if (c == '"') {
                     if (previous != '\n' && !printingString) {
                         fputc('\n', outputFile);
                     }
-                    fputc(c, outputFile);
+                    
                     printingString = !printingString;
                 } else if (c == ' ') {
                     if (previous != '\n') {
