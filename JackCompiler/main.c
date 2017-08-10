@@ -99,8 +99,8 @@ int main(int argc, const char * argv[]) {
         strcpy(outputPath, inputPath);
         char *loc = strrchr(outputPath, '.');
         *(loc) = 0;
-        strcat(outputPath, "_test.xml"); //test files already have an xml file, must add '_test' to each file to distinguish
-        FILE *outputFile = fopen(outputPath, "w");
+        strcat(outputPath, "_stanOutput.xml"); //test files already have an xml file, must add '_test' to each file to distinguish
+        FILE *outputFile = fopen(outputPath, "w+");
         
         free(inputPath);
         
@@ -111,16 +111,40 @@ int main(int argc, const char * argv[]) {
             if ((trimmed[0] == '/' && (trimmed[1] == '/' || trimmed[1] == '*')) || trimmed[0] == '*' ||
                 isspace(trimmed[0]) || strcmp(trimmed, "") == 0 || strcmp(trimmed, "\r\n") == 0) { continue; }
             
-            static const char *delimeter = " ";
-            char *token = strtok(trimmed, delimeter);
-            
-            while (token != NULL) {
-                //TODO: need to further tokenize based on symbols that may be in the token, like '.' or '('
-                fprintf(outputFile, "%s\n", token);
+            int printingString = 0;
+            for (int i = 0; i < strlen(trimmed); i++) {
+                char c = trimmed[i];
                 
-                token = strtok(NULL, delimeter);
+                fpos_t pos;
+                fgetpos(outputFile, &pos);
+                fseek(outputFile, -1, SEEK_END);
+                int previous = fgetc(outputFile);
+                fsetpos(outputFile, &pos);
+                
+                if (printingString && c != '"') {
+                    fputc(c, outputFile);
+                } else if (c == '{' || c == '}' || c == '(' || c == ')' || c == '[' || c == ']' || c == '.' ||
+                           c == ',' || c == ';' || c == '+' || c == '-' || c == '*' || c == '/' || c == '&' ||
+                           c == '|' || c == '<' || c == '>' || c == '=' || c == '~') {
+                    if (previous != '\n') {
+                        fputc('\n', outputFile);
+                    }
+                    fputc(c, outputFile);
+                    fputc('\n', outputFile);
+                } else if (c == '"') {
+                    if (previous != '\n' && !printingString) {
+                        fputc('\n', outputFile);
+                    }
+                    fputc(c, outputFile);
+                    printingString = !printingString;
+                } else if (c == ' ') {
+                    if (previous != '\n') {
+                        fputc('\n', outputFile);
+                    }
+                } else {
+                    fputc(c, outputFile);
+                }
             }
-            
         }
         
         fclose(outputFile);
