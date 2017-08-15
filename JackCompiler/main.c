@@ -14,6 +14,8 @@
 #include <string.h>
 #include <ctype.h>
 
+#define isSymbol(c) c == '{' || c == '}' || c == '(' || c == ')' || c == '[' || c == ']' || c == '.' || c == ',' || c == ';' || c == '+' || c == '-' || c == '*' || c == '/' || c == '&' || c == '|' || c == '<' || c == '>' || c == '=' || c == '~'
+
 int is_jack_file(const char *file) {
     const char *dot = strrchr(file, '.');
     if(!dot || dot == file) { return 0; }
@@ -95,14 +97,12 @@ int main(int argc, const char * argv[]) {
         FILE *inputFile = fopen(inputPath, "r");
         
         //set up output file for writing
-        char outputPath[strlen(inputPath) + 1];
-        strcpy(outputPath, inputPath);
-        char *loc = strrchr(outputPath, '.');
+        char *helperPath = malloc(strlen(inputPath) + 1);
+        strcpy(helperPath, inputPath);
+        char *loc = strrchr(helperPath, '.');
         *(loc) = 0;
-        strcat(outputPath, "_stanOutput.xml"); //test files already have an xml file, must add '_test' to each file to distinguish
-        FILE *outputFile = fopen(outputPath, "w+");
-        
-        free(inputPath);
+        strcat(helperPath, "_helperFile.xml"); //test files already have an xml file, must add "_" to each file to distinguish
+        FILE *helperFile = fopen(helperPath, "w+");
         
         char line[256];
         while (fgets(line, sizeof(line), inputFile)) {
@@ -116,48 +116,72 @@ int main(int argc, const char * argv[]) {
                 char c = trimmed[i];
                 
                 fpos_t pos;
-                fgetpos(outputFile, &pos);
-                fseek(outputFile, -1, SEEK_END);
-                int previous = fgetc(outputFile);
-                fsetpos(outputFile, &pos);
+                fgetpos(helperFile, &pos);
+                fseek(helperFile, -1, SEEK_END);
+                int previous = fgetc(helperFile);
+                fsetpos(helperFile, &pos);
                 
                 if (printingString && c != '"') {
-                    fputc(c, outputFile);
-                } else if (c == '{' || c == '}' || c == '(' || c == ')' || c == '[' || c == ']' || c == '.' ||
-                           c == ',' || c == ';' || c == '+' || c == '-' || c == '*' || c == '/' || c == '&' ||
-                           c == '|' || c == '<' || c == '>' || c == '=' || c == '~') {
+                    fputc(c, helperFile);
+                } else if (isSymbol(c)) {
                     if (previous != '\n') {
-                        fputc('\n', outputFile);
+                        fputc('\n', helperFile);
                     }
                     
                     if (c == '<') {
-                        fputs("&lt;", outputFile);
+                        fputs("&lt;", helperFile);
                     } else if (c == '>') {
-                        fputs("&gt;", outputFile);
+                        fputs("&gt;", helperFile);
                     } else if (c == '&') {
-                        fputs("&amp;", outputFile);
+                        fputs("&amp;", helperFile);
                     } else {
-                        fputc(c, outputFile);
+                        fputc(c, helperFile);
                     }
                     
-                    fputc('\n', outputFile);
+                    fputc('\n', helperFile);
                 } else if (c == '"') {
-                    if (previous != '\n' && !printingString) {
-                        fputc('\n', outputFile);
+                    if (printingString && previous != '\n') {
+                        fputc('\n', helperFile);
                     }
                     
                     printingString = !printingString;
                 } else if (c == ' ') {
                     if (previous != '\n') {
-                        fputc('\n', outputFile);
+                        fputc('\n', helperFile);
                     }
                 } else {
-                    fputc(c, outputFile);
+                    fputc(c, helperFile);
                 }
             }
         }
         
+        //set up output file for writing
+        char *outputPath = malloc(strlen(inputPath) + 1);
+        strcpy(outputPath, inputPath);
+        char *location = strrchr(outputPath, '.');
+        *(location) = 0;
+        strcat(outputPath, "_stanOutput.xml"); //test files already have an xml file, must add "_" to each file to distinguish
+        FILE *outputFile = fopen(outputPath, "w");
+        
+        fputs("<tokens>\n", outputFile);
+        
+        rewind(helperFile);
+        while (fgets(line, sizeof(line), helperFile)) {
+            if (isSymbol(line[0])) {
+                fputs("<symbol> ", outputFile);
+                fputs(line, outputFile);
+                fseek(outputFile, -1, SEEK_CUR);
+                fputs(" </symbol>\n", outputFile);
+            } else {
+                fputs(line, outputFile);
+            }
+        }
+        
+        fputs("</tokens>", outputFile);
         fclose(outputFile);
+        
+        fclose(helperFile);
+        remove(helperPath);
     }
     
     free(files);
