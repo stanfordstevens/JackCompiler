@@ -21,7 +21,7 @@ int is_jack_file(const char *file) {
     if(!dot || dot == file) { return 0; }
     
     const char *extension = dot + 1;
-    return (strcmp(extension, "jack") == 0) ? 1 : 0;
+    return (!strcmp(extension, "jack")) ? 1 : 0;
 }
 
 char* trim_whitespace(char *string) {
@@ -109,7 +109,7 @@ int main(int argc, const char * argv[]) {
             char *trimmed = trim_whitespace(line);
             
             if ((trimmed[0] == '/' && (trimmed[1] == '/' || trimmed[1] == '*')) || trimmed[0] == '*' ||
-                isspace(trimmed[0]) || strcmp(trimmed, "") == 0 || strcmp(trimmed, "\r\n") == 0) { continue; }
+                isspace(trimmed[0]) || !strcmp(trimmed, "") || !strcmp(trimmed, "\r\n")) { continue; }
             
             int printingString = 0;
             for (int i = 0; i < strlen(trimmed); i++) {
@@ -140,10 +140,11 @@ int main(int argc, const char * argv[]) {
                     
                     fputc('\n', helperFile);
                 } else if (c == '"') {
-                    if (printingString && previous != '\n') {
+                    if (!printingString && previous != '\n') {
                         fputc('\n', helperFile);
                     }
                     
+                    fputc(c, helperFile);
                     printingString = !printingString;
                 } else if (c == ' ') {
                     if (previous != '\n') {
@@ -172,8 +173,32 @@ int main(int argc, const char * argv[]) {
                 fputs(line, outputFile);
                 fseek(outputFile, -1, SEEK_CUR);
                 fputs(" </symbol>\n", outputFile);
-            } else {
+            } else if (!strcmp(line, "class\n") || !strcmp(line, "constructor\n") || !strcmp(line, "function\n") || !strcmp(line, "method\n") ||
+                       !strcmp(line, "field\n") || !strcmp(line, "static\n") || !strcmp(line, "var\n") || !strcmp(line, "int\n") ||
+                       !strcmp(line, "char\n") || !strcmp(line, "boolean\n") || !strcmp(line, "void\n") || !strcmp(line, "true\n") ||
+                       !strcmp(line, "false\n") || !strcmp(line, "null\n") || !strcmp(line, "this\n") || !strcmp(line, "let\n") ||
+                       !strcmp(line, "do\n") || !strcmp(line, "if\n") || !strcmp(line, "else\n") || !strcmp(line, "while\n") ||
+                       !strcmp(line, "return\n")) {
+                fputs("<keyword> ", outputFile);
                 fputs(line, outputFile);
+                fseek(outputFile, -1, SEEK_CUR);
+                fputs(" </keyword>\n", outputFile);
+            } else if (line[0] >= '0' && line[0] <= '9') {
+                fputs("<integerConstant> ", outputFile);
+                fputs(line, outputFile);
+                fseek(outputFile, -1, SEEK_CUR);
+                fputs(" </integerConstant>\n", outputFile);
+            } else if (line[0] == '"') {
+                fputs("<stringConstant> ", outputFile);
+                memmove(line, line+1, strlen(line));
+                fputs(line, outputFile);
+                fseek(outputFile, -2, SEEK_CUR);
+                fputs(" </stringConstant>\n", outputFile);
+            } else {
+                fputs("<identifier> ", outputFile);
+                fputs(line, outputFile);
+                fseek(outputFile, -1, SEEK_CUR);
+                fputs(" </identifier>\n", outputFile);
             }
         }
         
