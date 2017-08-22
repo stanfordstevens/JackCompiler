@@ -117,12 +117,15 @@ int main(int argc, const char * argv[]) {
                 
                 fpos_t pos;
                 fgetpos(helperFile, &pos);
-                fseek(helperFile, -1, SEEK_END);
-                int previous = fgetc(helperFile);
+                fseek(helperFile, -1, SEEK_CUR);
+                char previous = fgetc(helperFile);
                 fsetpos(helperFile, &pos);
                 
                 if (printingString && c != '"') {
                     fputc(c, helperFile);
+                } else if (c == '/' && trimmed[i+1] == '/') { //TODO: check if 'i+1' is out of bounds
+                    //do nothing??
+                    break;
                 } else if (isSymbol(c)) {
                     if (previous != '\n') {
                         fputc('\n', helperFile);
