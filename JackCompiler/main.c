@@ -842,6 +842,16 @@ void compileClass(FILE *inputFile, FILE *outputFile) {
     fputs("</class>\n", outputFile);
 }
 
+char* pathWithInputPath(char *inputPath, char *extension) {
+    char *path = malloc(strlen(inputPath) + 1);
+    strcpy(path, inputPath);
+    char *loc = strrchr(path, '.');
+    *(loc) = 0;
+    strcat(path, extension); //test files already have an xml file, must add extension to distinguish
+    
+    return path;
+}
+
 int main(int argc, const char * argv[]) {
     char *filepath = malloc(200);
     printf("Enter filepath bitch> ");
@@ -897,12 +907,8 @@ int main(int argc, const char * argv[]) {
         char *inputPath = files[i];
         FILE *inputFile = fopen(inputPath, "r");
         
-        //set up output file for writing
-        char *helperPath = malloc(strlen(inputPath) + 1);
-        strcpy(helperPath, inputPath);
-        char *loc = strrchr(helperPath, '.');
-        *(loc) = 0;
-        strcat(helperPath, "_helperFile.xml"); //test files already have an xml file, must add "_" to each file to distinguish
+        //set up helper file for writing
+        char *helperPath = pathWithInputPath(inputPath, "_helperFile.xml");
         FILE *helperFile = fopen(helperPath, "w+");
         
         //tokenizer
@@ -925,8 +931,8 @@ int main(int argc, const char * argv[]) {
                 
                 if (printingString && c != '"') {
                     fputc(c, helperFile);
-                } else if (c == '/' && trimmed[i+1] == '/') { //TODO: check if 'i+1' is out of bounds
-                    //do nothing??
+                } else if (c == '/' && i+1 < strlen(trimmed) && trimmed[i+1] == '/') {
+                    //do nothing
                     break;
                 } else if (isSymbol(c)) {
                     if (previous != '\n') {
@@ -962,11 +968,7 @@ int main(int argc, const char * argv[]) {
         }
         
         //set up output file for writing
-        char *outputPath = malloc(strlen(inputPath) + 1);
-        strcpy(outputPath, inputPath);
-        char *location = strrchr(outputPath, '.');
-        *(location) = 0;
-        strcat(outputPath, "_stanOutput.xml"); //test files already have an xml file, must add "_" to each file to distinguish
+        char *outputPath = pathWithInputPath(inputPath, "_stanOutput.xml");
         FILE *outputFile = fopen(outputPath, "w");
         
         //parser
