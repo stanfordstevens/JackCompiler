@@ -248,6 +248,77 @@ void compileExpressionList(FILE *inputFile, FILE *outputFile, int tabCount) {
     }
 }
 
+void compileSubroutineCall(FILE *inputFile, FILE *outputFile, int tabCount) {
+    char line[256];
+    
+    fgets(line, sizeof(line), inputFile);
+    if (tokenType(line) == TokenTypeIdentifier) {
+        fputtabs(outputFile, tabCount);
+        fputs("<identifier> ", outputFile);
+        fputs(line, outputFile);
+        fseek(outputFile, -1, SEEK_CUR);
+        fputs(" </identifier>\n", outputFile);
+    } else {
+        printf("Expected identifier at beginning of subroutine call!\n");
+        exit(1);
+    }
+    
+    fgets(line, sizeof(line), inputFile);
+    if (!strcmp(line, "(\n")) {
+        fputtabs(outputFile, tabCount);
+        fputs("<symbol> ( </symbol>\n", outputFile);
+        
+        compileExpressionList(inputFile, outputFile, tabCount);
+
+        fgets(line, sizeof(line), inputFile);
+        if (!strcmp(line, ")\n")) {
+            fputtabs(outputFile, tabCount);
+            fputs("<symbol> ) </symbol>\n", outputFile);
+        } else {
+            printf("Expected ')' to end expression list!\n");
+            exit(1);
+        }
+    } else if (!strcmp(line, ".\n")) {
+        fputtabs(outputFile, tabCount);
+        fputs("<symbol> . </symbol>\n", outputFile);
+        
+        fgets(line, sizeof(line), inputFile);
+        if (tokenType(line) == TokenTypeIdentifier) {
+            fputtabs(outputFile, tabCount);
+            fputs("<identifier> ", outputFile);
+            fputs(line, outputFile);
+            fseek(outputFile, -1, SEEK_CUR);
+            fputs(" </identifier>\n", outputFile);
+        } else {
+            printf("Invalid subroutine name!\n");
+            exit(1);
+        }
+        
+        fgets(line, sizeof(line), inputFile);
+        if (!strcmp(line, "(\n")) {
+            fputtabs(outputFile, tabCount); //TODO: make this whole chunk a function, because it is used above??
+            fputs("<symbol> ( </symbol>\n", outputFile);
+            
+            compileExpressionList(inputFile, outputFile, tabCount);
+            
+            fgets(line, sizeof(line), inputFile);
+            if (!strcmp(line, ")\n")) {
+                fputtabs(outputFile, tabCount);
+                fputs("<symbol> ) </symbol>\n", outputFile);
+            } else {
+                printf("Expected ')' to end expression list!\n");
+                exit(1);
+            }
+        } else {
+            printf("Invalid subroutine name!\n");
+            exit(1);
+        }
+    } else {
+        printf("Expected '(' or '.' after subroutine call!\n");
+        exit(1);
+    }
+}
+
 void compileTerm(FILE *inputFile, FILE *outputFile, int tabCount) {
     char line[256];
     int outerTabCount = tabCount;
@@ -255,6 +326,9 @@ void compileTerm(FILE *inputFile, FILE *outputFile, int tabCount) {
     
     fputtabs(outputFile, outerTabCount);
     fputs("<term>\n", outputFile);
+    
+    fpos_t initialTermPos;
+    fgetpos(inputFile, &initialTermPos);
     
     fgets(line, sizeof(line), inputFile);
     TokenType termType = tokenType(line);
@@ -282,17 +356,21 @@ void compileTerm(FILE *inputFile, FILE *outputFile, int tabCount) {
             fputs(" </keyword>\n", outputFile);
             break;
         case TokenTypeIdentifier:
-            fputtabs(outputFile, innerTabCount);
-            fputs("<identifier> ", outputFile);
-            fputs(line, outputFile);
-            fseek(outputFile, -1, SEEK_CUR);
-            fputs(" </identifier>\n", outputFile);
-            
+        {
             fpos_t pos;
             fgetpos(inputFile, &pos);
             
             fgets(line, sizeof(line), inputFile);
+            fsetpos(inputFile, &initialTermPos); //TODO: this is weird and hacky
             if (!strcmp(line, "[\n")) {
+                fgets(line, sizeof(line), inputFile);
+                fputtabs(outputFile, innerTabCount);
+                fputs("<identifier> ", outputFile);
+                fputs(line, outputFile);
+                fseek(outputFile, -1, SEEK_CUR);
+                fputs(" </identifier>\n", outputFile);
+                
+                fgets(line, sizeof(line), inputFile);
                 fputtabs(outputFile, innerTabCount);
                 fputs("<symbol> [ </symbol>\n", outputFile); //TODO: do this same thing in other places where i can
                 
@@ -306,75 +384,20 @@ void compileTerm(FILE *inputFile, FILE *outputFile, int tabCount) {
                     printf("Expected ']' to end expression!\n");
                     exit(1);
                 }
-            } else if (!strcmp(line, "(\n")) {
-                fputtabs(outputFile, innerTabCount);
-                fputs("<symbol> ( </symbol>\n", outputFile);
-                
-                fpos_t pos;
-                fgetpos(inputFile, &pos);
-                
-                fgets(line, sizeof(line), inputFile);
-                if (strcmp(line, ")\n") != 0) {
-                    fsetpos(inputFile, &pos);
-                    compileExpressionList(inputFile, outputFile, innerTabCount);
-                    
-                    fgets(line, sizeof(line), inputFile);
-                }
-                
-                if (!strcmp(line, ")\n")) {
-                    fputtabs(outputFile, innerTabCount);
-                    fputs("<symbol> ) </symbol>\n", outputFile);
-                } else {
-                    printf("Expected ')' to end expression list!\n");
-                    exit(1);
-                }
-            } else if (!strcmp(line, ".\n")) {
-                fputtabs(outputFile, innerTabCount);
-                fputs("<symbol> . </symbol>\n", outputFile);
-                
-                fgets(line, sizeof(line), inputFile);
-                if (tokenType(line) == TokenTypeIdentifier) {
-                    fputtabs(outputFile, innerTabCount);
-                    fputs("<identifier> ", outputFile);
-                    fputs(line, outputFile);
-                    fseek(outputFile, -1, SEEK_CUR);
-                    fputs(" </identifier>\n", outputFile);
-                } else {
-                    printf("Invalid subroutine name!\n");
-                    exit(1);
-                }
-                
-                fgets(line, sizeof(line), inputFile);
-                if (!strcmp(line, "(\n")) {
-                    fputtabs(outputFile, innerTabCount); //TODO: make this whole chunk a function, because it is used above??
-                    fputs("<symbol> ( </symbol>\n", outputFile);
-                    
-                    fpos_t pos;
-                    fgetpos(inputFile, &pos);
-                    
-                    fgets(line, sizeof(line), inputFile);
-                    if (strcmp(line, ")\n") != 0) {
-                        fsetpos(inputFile, &pos);
-                        compileExpressionList(inputFile, outputFile, innerTabCount);
-                        
-                        fgets(line, sizeof(line), inputFile);
-                    }
-                    
-                    if (!strcmp(line, ")\n")) {
-                        fputtabs(outputFile, innerTabCount);
-                        fputs("<symbol> ) </symbol>\n", outputFile);
-                    } else {
-                        printf("Expected ')' to end expression list!\n");
-                        exit(1);
-                    }
-                } else {
-                    printf("Invalid subroutine name!\n");
-                    exit(1);
-                }
+            } else if (!strcmp(line, "(\n") || !strcmp(line, ".\n")) {
+                compileSubroutineCall(inputFile, outputFile, innerTabCount);
             } else {
+                fgets(line, sizeof(line), inputFile);
+                fputtabs(outputFile, innerTabCount);
+                fputs("<identifier> ", outputFile);
+                fputs(line, outputFile);
+                fseek(outputFile, -1, SEEK_CUR);
+                fputs(" </identifier>\n", outputFile);
+                
                 fsetpos(inputFile, &pos);
             }
             break;
+        }
         case TokenTypeSymbol:
             if (!strcmp(line, "(\n")) {
                 fputtabs(outputFile, innerTabCount);
@@ -425,7 +448,7 @@ void compileExpression(FILE *inputFile, FILE *outputFile, int tabCount) {
         fgetpos(inputFile, &pos);
         
         fgets(line, sizeof(line), inputFile);
-        if (!strcmp(line, "+\n") || !strcmp(line, "-\n") || !strcmp(line, "*\n") || !strcmp(line, "/\n") || !strcmp(line, "&\n") || !strcmp(line, "|\n") || !strcmp(line, "<\n") || !strcmp(line, ">\n") || !strcmp(line, "=\n")) {
+        if (!strcmp(line, "+\n") || !strcmp(line, "-\n") || !strcmp(line, "*\n") || !strcmp(line, "/\n") || !strcmp(line, "&amp;\n") || !strcmp(line, "|\n") || !strcmp(line, "&lt;\n") || !strcmp(line, "&gt;\n") || !strcmp(line, "=\n")) {
             fputtabs(outputFile, innerTabCount);
             fputs("<symbol> ", outputFile);
             fputs(line, outputFile);
@@ -522,14 +545,110 @@ void compileStatements(FILE *inputFile, FILE *outputFile, int tabCount) {
                     printf("Expected ';' at end of 'let' statement!\n");
                     exit(1);
                 }
-            } else if (!strcmp(line, "if\n")) {
+            } else if (!strcmp(line, "if\n") || !strcmp(line, "while\n")) {
+                fgets(line, sizeof(line), inputFile);
+                if (!strcmp(line, "(\n")) {
+                    fputtabs(outputFile, newInnerTab);
+                    fputs("<symbol> ( </symbol>\n", outputFile);
+                } else {
+                    printf("Expected '(' at beginning of %s expression!\n", statementType);
+                    exit(1);
+                }
                 
-            } else if (!strcmp(line, "while\n")) {
+                compileExpression(inputFile, outputFile, newInnerTab);
                 
+                fgets(line, sizeof(line), inputFile);
+                if (!strcmp(line, ")\n")) {
+                    fputtabs(outputFile, newInnerTab);
+                    fputs("<symbol> ) </symbol>\n", outputFile);
+                } else {
+                    printf("Expected ')' at end of %s expression!\n", statementType);
+                    exit(1);
+                }
+                
+                fgets(line, sizeof(line), inputFile);
+                if (!strcmp(line, "{\n")) {
+                    fputtabs(outputFile, newInnerTab);
+                    fputs("<symbol> { </symbol>\n", outputFile);
+                } else {
+                    printf("Expected '{' at beginning of %s statement!\n", statementType);
+                    exit(1);
+                }
+                
+                compileStatements(inputFile, outputFile, newInnerTab);
+                
+                fgets(line, sizeof(line), inputFile);
+                if (!strcmp(line, "}\n")) {
+                    fputtabs(outputFile, newInnerTab);
+                    fputs("<symbol> } </symbol>\n", outputFile);
+                } else {
+                    printf("Expected '}' at end of %s statement!\n", statementType);
+                    exit(1);
+                }
+                
+                if (!strcmp(statementType, "if\n")) {
+                    fpos_t pos;
+                    fgetpos(inputFile, &pos);
+                    
+                    fgets(line, sizeof(line), inputFile);
+                    if (!strcmp(line, "else\n")) {
+                        fputtabs(outputFile, newInnerTab);
+                        fputs("<keyword> else </keyword>\n", outputFile);
+                        
+                        //TODO: make this a function because it's the same as above??
+                        fgets(line, sizeof(line), inputFile);
+                        if (!strcmp(line, "{\n")) {
+                            fputtabs(outputFile, newInnerTab);
+                            fputs("<symbol> { </symbol>\n", outputFile);
+                        } else {
+                            printf("Expected '{' at beginning of 'else' statement!\n");
+                            exit(1);
+                        }
+                        
+                        compileStatements(inputFile, outputFile, newInnerTab);
+                        
+                        fgets(line, sizeof(line), inputFile);
+                        if (!strcmp(line, "}\n")) {
+                            fputtabs(outputFile, newInnerTab);
+                            fputs("<symbol> } </symbol>\n", outputFile);
+                        } else {
+                            printf("Expected '}' at end of 'else' statement!\n");
+                            exit(1);
+                        }
+                    } else {
+                        fsetpos(inputFile, &pos);
+                    }
+                }
             } else if (!strcmp(line, "do\n")) {
+                compileSubroutineCall(inputFile, outputFile, newInnerTab);
                 
+                fgets(line, sizeof(line), inputFile);
+                if (!strcmp(line, ";\n")) {
+                    fputtabs(outputFile, newInnerTab);
+                    fputs("<symbol> ; </symbol>\n", outputFile);
+                } else {
+                    printf("Expected ';' at end of 'do' statement!\n");
+                    exit(1);
+                }
             } else if (!strcmp(line, "return\n")) {
+                fpos_t pos;
+                fgetpos(inputFile, &pos);
                 
+                fgets(line, sizeof(line), inputFile);
+                if (strcmp(line, ";\n") != 0) {
+                    fsetpos(inputFile, &pos);
+                    compileExpression(inputFile, outputFile, newInnerTab);
+                    
+                    fgets(line, sizeof(line), inputFile);
+                }
+                
+                if (!strcmp(line, ";\n")) {
+                    fputtabs(outputFile, newInnerTab);
+                    fputs("<symbol> ; </symbol>\n", outputFile);
+                } else {
+                    printf("Expected ';' at end of 'return' statement!\n");
+                    exit(1);
+                }
             }
             
             fputtabs(outputFile, innerTabCount);
@@ -577,11 +696,6 @@ void compileSubroutineBody(FILE *inputFile, FILE *outputFile, int tabCount) {
         fgetpos(inputFile, &pos);
         
         fgets(line, sizeof(line), inputFile);
-        if (tokenType(line) != TokenTypeKeyword) {
-            printf("Only keywords should be specified in class!\n");
-            exit(1);
-        }
-        
         if (!strcmp(line, "var\n")) {
             compileVarDeclaration(inputFile, outputFile, innerTabCount);
         } else if (!strcmp(line, "}\n")) {
@@ -703,34 +817,29 @@ void compileClass(FILE *inputFile, FILE *outputFile) {
     }
     
     fgets(line, sizeof(line), inputFile);
-    if (tokenType(line) == TokenTypeSymbol) {
+    if (!strcmp(line, "{\n")) {
         fputtabs(outputFile, tabCount);
-        fputs("<symbol> ", outputFile);
-        fputs(line, outputFile);
-        fseek(outputFile, -1, SEEK_CUR);
-        fputs(" </symbol>\n", outputFile);
+        fputs("<symbol> { </symbol>\n", outputFile);
     } else {
-        printf("Class declaration has no class name!\n");
+        printf("Class declaration is missing '{'!\n");
         exit(1);
     }
     
     while (fgets(line, sizeof(line), inputFile)) {
-        if (tokenType(line) != TokenTypeKeyword) {
-            printf("Only keywords should be specified in class!\n");
-            exit(1);
-        }
-        
         if (!strcmp(line, "field\n") || !strcmp(line, "static\n")) {
             compileClassVarDeclaration(line, inputFile, outputFile, tabCount);
         } else if (!strcmp(line, "constructor\n") || !strcmp(line, "function\n") || !strcmp(line, "method\n")) {
             compileSubroutineDeclaration(line, inputFile, outputFile, tabCount);
+        } else if (!strcmp(line, "}\n")) {
+            fputtabs(outputFile, tabCount);
+            fputs("<symbol> } </symbol>\n", outputFile);
         } else {
             printf("Unrecognized keyword specified in class!\n");
             exit(1);
         }
     }
     
-    fputs("</class>", outputFile);
+    fputs("</class>\n", outputFile);
 }
 
 int main(int argc, const char * argv[]) {
