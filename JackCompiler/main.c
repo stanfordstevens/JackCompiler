@@ -953,8 +953,10 @@ int main(int argc, const char * argv[]) {
                     
                     fputc(c, helperFile);
                     printingString = !printingString;
-                } else if (c == ' ' && previous != '\n') {
-                    fputc('\n', helperFile);
+                } else if (c == ' ') {
+                    if (previous != '\n') {
+                        fputc('\n', helperFile);
+                    }
                 } else {
                     fputc(c, helperFile);
                 }
