@@ -49,23 +49,15 @@ char* trim_whitespace(char *string) {
     return string;
 }
 
-TokenType tokenType(char *token) {
-    if (isSymbol(token[0])) {
-        return TokenTypeSymbol;
-    } else if (!strcmp(token, "class\n") || !strcmp(token, "constructor\n") || !strcmp(token, "function\n") || !strcmp(token, "method\n") ||
-               !strcmp(token, "field\n") || !strcmp(token, "static\n") || !strcmp(token, "var\n") || !strcmp(token, "int\n") ||
-               !strcmp(token, "char\n") || !strcmp(token, "boolean\n") || !strcmp(token, "void\n") || !strcmp(token, "true\n") ||
-               !strcmp(token, "false\n") || !strcmp(token, "null\n") || !strcmp(token, "this\n") || !strcmp(token, "let\n") ||
-               !strcmp(token, "do\n") || !strcmp(token, "if\n") || !strcmp(token, "else\n") || !strcmp(token, "while\n") ||
-               !strcmp(token, "return\n")) {
-        return TokenTypeKeyword;
-    } else if (token[0] >= '0' && token[0] <= '9') {
-        return TokenTypeInteger;
-    } else if (token[0] == '"') {
-        return TokenTypeString;
-    } else {
-        return TokenTypeIdentifier;
+char *fgets_nl(char *buffer, int size, FILE *file) {
+    buffer = fgets(buffer, size, file);
+    if (buffer == NULL) { return NULL; }
+    
+    char *pos = strchr(buffer, '\n');
+    if (pos != NULL) {
+        *pos = '\0';
     }
+    return buffer;
 }
 
 void fputtabs(FILE *outputFile, int count) {
@@ -76,46 +68,56 @@ void fputtabs(FILE *outputFile, int count) {
     }
 }
 
+void fputterminal(char *terminal, char *tag, int tabCount, FILE *outputFile) {
+    fputtabs(outputFile, tabCount);
+    fprintf(outputFile, "<%s> %s </%s>\n", tag, terminal, tag);
+}
+
+TokenType tokenType(char *token) {
+    if (isSymbol(token[0])) {
+        return TokenTypeSymbol;
+    } else if (!strcmp(token, "class") || !strcmp(token, "constructor") || !strcmp(token, "function") || !strcmp(token, "method") ||
+               !strcmp(token, "field") || !strcmp(token, "static") || !strcmp(token, "var") || !strcmp(token, "int") ||
+               !strcmp(token, "char") || !strcmp(token, "boolean") || !strcmp(token, "void") || !strcmp(token, "true") ||
+               !strcmp(token, "false") || !strcmp(token, "null") || !strcmp(token, "this") || !strcmp(token, "let") ||
+               !strcmp(token, "do") || !strcmp(token, "if") || !strcmp(token, "else") || !strcmp(token, "while") ||
+               !strcmp(token, "return")) {
+        return TokenTypeKeyword;
+    } else if (token[0] >= '0' && token[0] <= '9') {
+        return TokenTypeInteger;
+    } else if (token[0] == '"') {
+        return TokenTypeString;
+    } else {
+        return TokenTypeIdentifier;
+    }
+}
+
 void compileVarBody(FILE *inputFile, FILE *outputFile, int tabCount) {
     char line[256];
     
-    fgets(line, sizeof(line), inputFile); //TODO: make function that gets line and removes new line character??
+    fgets_nl(line, sizeof(line), inputFile);
     TokenType lineType = tokenType(line);
-    if (lineType == TokenTypeIdentifier || !strcmp(line, "int\n") || !strcmp(line, "char\n") || !strcmp(line, "boolean\n")) {
-        char *type = malloc(11);
-        type = (lineType == TokenTypeIdentifier) ? "identifier" : "keyword"; //TODO: ask daniel why it crashes when i try to free this
-        
-        fputtabs(outputFile, tabCount);
-        fprintf(outputFile, "<%s> %s", type, line);
-        fseek(outputFile, -1, SEEK_CUR);
-        fprintf(outputFile, " </%s>\n", type);
+    if (lineType == TokenTypeIdentifier || !strcmp(line, "int") || !strcmp(line, "char") || !strcmp(line, "boolean")) {
+        fputterminal(line, (lineType == TokenTypeIdentifier) ? "identifier" : "keyword", tabCount, outputFile);
     } else {
         printf("Var declaration does not have a valid type!\n");
         exit(1);
     }
     
     while (1) {
-        fgets(line, sizeof(line), inputFile);
+        fgets_nl(line, sizeof(line), inputFile);
         if (tokenType(line) == TokenTypeIdentifier) {
-            fputtabs(outputFile, tabCount);
-            fputs("<identifier> ", outputFile);
-            fputs(line, outputFile);
-            fseek(outputFile, -1, SEEK_CUR);
-            fputs(" </identifier>\n", outputFile);
+            fputterminal(line, "identifier", tabCount, outputFile);
         } else {
             printf("Var name must be of token type 'identifier'!\n");
             exit(1);
         }
         
-        fgets(line, sizeof(line), inputFile);
-        if (!strcmp(line, ";\n") || !strcmp(line, ",\n")) {
-            fputtabs(outputFile, tabCount);
-            fputs("<symbol> ", outputFile);
-            fputs(line, outputFile);
-            fseek(outputFile, -1, SEEK_CUR);
-            fputs(" </symbol>\n", outputFile);
+        fgets_nl(line, sizeof(line), inputFile);
+        if (!strcmp(line, ";") || !strcmp(line, ",")) {
+            fputterminal(line, "symbol", tabCount, outputFile);
             
-            if (!strcmp(line, ";\n")) {
+            if (!strcmp(line, ";")) {
                 break;
             }
         } else {
@@ -125,19 +127,14 @@ void compileVarBody(FILE *inputFile, FILE *outputFile, int tabCount) {
     }
 }
 
-void compileClassVarDeclaration(char *varType, FILE *inputFile, FILE *outputFile, int tabCount) {
+void compileClassVarDeclaration(char *varType, FILE *inputFile, FILE *outputFile, int tabCount) { //TODO: combine class var and var dec?
     int outerTabCount = tabCount;
     int innerTabCount = tabCount + 1;
     
     fputtabs(outputFile, outerTabCount);
     fputs("<classVarDec>\n", outputFile);
     
-    fputtabs(outputFile, innerTabCount);
-    fputs("<keyword> ", outputFile);
-    fputs(varType, outputFile);
-    fseek(outputFile, -1, SEEK_CUR);
-    fputs(" </keyword>\n", outputFile);
-    
+    fputterminal(varType, "keyword", innerTabCount, outputFile);
     compileVarBody(inputFile, outputFile, innerTabCount);
     
     fputtabs(outputFile, outerTabCount);
@@ -151,11 +148,7 @@ void compileVarDeclaration(FILE *inputFile, FILE *outputFile, int tabCount) {
     fputtabs(outputFile, outerTabCount);
     fputs("<varDec>\n", outputFile);
     
-    fputtabs(outputFile, innerTabCount);
-    fputs("<keyword> ", outputFile);
-    fputs("var", outputFile);
-    fputs(" </keyword>\n", outputFile);
-    
+    fputterminal("var", "keyword", innerTabCount, outputFile);
     compileVarBody(inputFile, outputFile, innerTabCount);
     
     fputtabs(outputFile, outerTabCount);
@@ -174,38 +167,24 @@ void compileParameterList(FILE *inputFile, FILE *outputFile, int tabCount) {
         fpos_t pos;
         fgetpos(inputFile, &pos);
         
-        fgets(line, sizeof(line), inputFile);
-        if (!strcmp(line, ",\n")) {
-            fputtabs(outputFile, innerTabCount);
-            fputs("<symbol> ", outputFile);
-            fputs(line, outputFile);
-            fseek(outputFile, -1, SEEK_CUR);
-            fputs(" </symbol>\n", outputFile);
-        } else if (!strcmp(line, ")\n")) {
+        fgets_nl(line, sizeof(line), inputFile);
+        if (!strcmp(line, ",")) {
+            fputterminal(line, "symbol", innerTabCount, outputFile);
+        } else if (!strcmp(line, ")")) {
             fsetpos(inputFile, &pos);
             break;
         } else {
             TokenType lineType = tokenType(line);
-            if (lineType == TokenTypeIdentifier || !strcmp(line, "int\n") || !strcmp(line, "char\n") || !strcmp(line, "boolean\n") || !strcmp(line, "void\n")) { //TODO: remove dupe
-                char *type = malloc(11);
-                type = (lineType == TokenTypeIdentifier) ? "identifier" : "keyword";
-                
-                fputtabs(outputFile, innerTabCount);
-                fprintf(outputFile, "<%s> %s", type, line);
-                fseek(outputFile, -1, SEEK_CUR);
-                fprintf(outputFile, " </%s>\n", type);
+            if (lineType == TokenTypeIdentifier || !strcmp(line, "int") || !strcmp(line, "char") || !strcmp(line, "boolean") || !strcmp(line, "void")) {
+                fputterminal(line, (lineType == TokenTypeIdentifier) ? "identifier" : "keyword", innerTabCount, outputFile);
             } else {
                 printf("Subroutine parameter does not have a valid type!\n");
                 exit(1);
             }
             
-            fgets(line, sizeof(line), inputFile);
+            fgets_nl(line, sizeof(line), inputFile);
             if (tokenType(line) == TokenTypeIdentifier) {
-                fputtabs(outputFile, innerTabCount);
-                fputs("<identifier> ", outputFile);
-                fputs(line, outputFile);
-                fseek(outputFile, -1, SEEK_CUR);
-                fputs(" </identifier>\n", outputFile);
+                fputterminal(line, "identifier", innerTabCount, outputFile);
             } else {
                 printf("Class var name must be of token type 'identifier'!\n");
                 exit(1);
@@ -231,16 +210,15 @@ void compileExpressionList(FILE *inputFile, FILE *outputFile, int tabCount) {
         fpos_t pos;
         fgetpos(inputFile, &pos);
         
-        fgets(line, sizeof(line), inputFile);
-        if (!strcmp(line, ")\n")) {
+        fgets_nl(line, sizeof(line), inputFile);
+        if (!strcmp(line, ")")) {
             fputtabs(outputFile, outerTabCount);
             fputs("</expressionList>\n", outputFile);
             
             fsetpos(inputFile, &pos);
             break;
-        } else if (!strcmp(line, ",\n")) {
-            fputtabs(outputFile, innerTabCount);
-            fputs("<symbol> , </symbol>\n", outputFile);
+        } else if (!strcmp(line, ",")) {
+            fputterminal(",", "symbol", innerTabCount, outputFile);
         } else {
             fsetpos(inputFile, &pos);
             compileExpression(inputFile, outputFile, innerTabCount);
@@ -251,60 +229,47 @@ void compileExpressionList(FILE *inputFile, FILE *outputFile, int tabCount) {
 void compileSubroutineCall(FILE *inputFile, FILE *outputFile, int tabCount) {
     char line[256];
     
-    fgets(line, sizeof(line), inputFile);
+    fgets_nl(line, sizeof(line), inputFile);
     if (tokenType(line) == TokenTypeIdentifier) {
-        fputtabs(outputFile, tabCount);
-        fputs("<identifier> ", outputFile);
-        fputs(line, outputFile);
-        fseek(outputFile, -1, SEEK_CUR);
-        fputs(" </identifier>\n", outputFile);
+        fputterminal(line, "identifier", tabCount, outputFile);
     } else {
         printf("Expected identifier at beginning of subroutine call!\n");
         exit(1);
     }
     
-    fgets(line, sizeof(line), inputFile);
-    if (!strcmp(line, "(\n")) {
-        fputtabs(outputFile, tabCount);
-        fputs("<symbol> ( </symbol>\n", outputFile);
+    fgets_nl(line, sizeof(line), inputFile);
+    if (!strcmp(line, "(")) {
+        fputterminal("(", "symbol", tabCount, outputFile);
         
         compileExpressionList(inputFile, outputFile, tabCount);
 
-        fgets(line, sizeof(line), inputFile);
-        if (!strcmp(line, ")\n")) {
-            fputtabs(outputFile, tabCount);
-            fputs("<symbol> ) </symbol>\n", outputFile);
+        fgets_nl(line, sizeof(line), inputFile);
+        if (!strcmp(line, ")")) {
+            fputterminal(")", "symbol", tabCount, outputFile);
         } else {
             printf("Expected ')' to end expression list!\n");
             exit(1);
         }
-    } else if (!strcmp(line, ".\n")) {
-        fputtabs(outputFile, tabCount);
-        fputs("<symbol> . </symbol>\n", outputFile);
+    } else if (!strcmp(line, ".")) {
+        fputterminal(".", "symbol", tabCount, outputFile);
         
-        fgets(line, sizeof(line), inputFile);
+        fgets_nl(line, sizeof(line), inputFile);
         if (tokenType(line) == TokenTypeIdentifier) {
-            fputtabs(outputFile, tabCount);
-            fputs("<identifier> ", outputFile);
-            fputs(line, outputFile);
-            fseek(outputFile, -1, SEEK_CUR);
-            fputs(" </identifier>\n", outputFile);
+            fputterminal(line, "identifier", tabCount, outputFile);
         } else {
             printf("Invalid subroutine name!\n");
             exit(1);
         }
         
-        fgets(line, sizeof(line), inputFile);
-        if (!strcmp(line, "(\n")) {
-            fputtabs(outputFile, tabCount); //TODO: make this whole chunk a function, because it is used above??
-            fputs("<symbol> ( </symbol>\n", outputFile);
+        fgets_nl(line, sizeof(line), inputFile);
+        if (!strcmp(line, "(")) {
+            fputterminal("(", "symbol", tabCount, outputFile); //TODO: make this whole chunk a function, because it is used above??
             
             compileExpressionList(inputFile, outputFile, tabCount);
             
-            fgets(line, sizeof(line), inputFile);
-            if (!strcmp(line, ")\n")) {
-                fputtabs(outputFile, tabCount);
-                fputs("<symbol> ) </symbol>\n", outputFile);
+            fgets_nl(line, sizeof(line), inputFile);
+            if (!strcmp(line, ")")) {
+                fputterminal(")", "symbol", tabCount, outputFile);
             } else {
                 printf("Expected ')' to end expression list!\n");
                 exit(1);
@@ -330,7 +295,7 @@ void compileTerm(FILE *inputFile, FILE *outputFile, int tabCount) {
     fpos_t initialTermPos;
     fgetpos(inputFile, &initialTermPos);
     
-    fgets(line, sizeof(line), inputFile);
+    fgets_nl(line, sizeof(line), inputFile);
     TokenType termType = tokenType(line);
     switch (termType) {
         case TokenTypeString:
@@ -338,87 +303,63 @@ void compileTerm(FILE *inputFile, FILE *outputFile, int tabCount) {
             fputs("<stringConstant> ", outputFile);
             memmove(line, line+1, strlen(line));
             fputs(line, outputFile);
-            fseek(outputFile, -2, SEEK_CUR);
+            fseek(outputFile, -1, SEEK_CUR);
             fputs("</stringConstant>\n", outputFile);
             break;
         case TokenTypeInteger:
-            fputtabs(outputFile, innerTabCount);
-            fputs("<integerConstant> ", outputFile);
-            fputs(line, outputFile);
-            fseek(outputFile, -1, SEEK_CUR);
-            fputs(" </integerConstant>\n", outputFile);
+            fputterminal(line, "integerConstant", innerTabCount, outputFile);
             break;
         case TokenTypeKeyword:
-            fputtabs(outputFile, innerTabCount);
-            fputs("<keyword> ", outputFile);
-            fputs(line, outputFile);
-            fseek(outputFile, -1, SEEK_CUR);
-            fputs(" </keyword>\n", outputFile);
+            fputterminal(line, "keyword", innerTabCount, outputFile);
             break;
         case TokenTypeIdentifier:
         {
             fpos_t pos;
             fgetpos(inputFile, &pos);
             
-            fgets(line, sizeof(line), inputFile);
+            fgets_nl(line, sizeof(line), inputFile);
             fsetpos(inputFile, &initialTermPos); //TODO: this is weird and hacky
-            if (!strcmp(line, "[\n")) {
-                fgets(line, sizeof(line), inputFile);
-                fputtabs(outputFile, innerTabCount);
-                fputs("<identifier> ", outputFile);
-                fputs(line, outputFile);
-                fseek(outputFile, -1, SEEK_CUR);
-                fputs(" </identifier>\n", outputFile);
+            if (!strcmp(line, "[")) {
+                fgets_nl(line, sizeof(line), inputFile);
+                fputterminal(line, "identifier", innerTabCount, outputFile);
                 
-                fgets(line, sizeof(line), inputFile);
-                fputtabs(outputFile, innerTabCount);
-                fputs("<symbol> [ </symbol>\n", outputFile); //TODO: do this same thing in other places where i can
+                fgets_nl(line, sizeof(line), inputFile);
+                fputterminal("[", "symbol", innerTabCount, outputFile);
                 
                 compileExpression(inputFile, outputFile, innerTabCount);
                 
-                fgets(line, sizeof(line), inputFile);
-                if (!strcmp(line, "]\n")) {
-                    fputtabs(outputFile, innerTabCount);
-                    fputs("<symbol> ] </symbol>\n", outputFile);
+                fgets_nl(line, sizeof(line), inputFile);
+                if (!strcmp(line, "]")) {
+                    fputterminal("]", "symbol", innerTabCount, outputFile);
                 } else {
                     printf("Expected ']' to end expression!\n");
                     exit(1);
                 }
-            } else if (!strcmp(line, "(\n") || !strcmp(line, ".\n")) {
+            } else if (!strcmp(line, "(") || !strcmp(line, ".")) {
                 compileSubroutineCall(inputFile, outputFile, innerTabCount);
             } else {
-                fgets(line, sizeof(line), inputFile);
-                fputtabs(outputFile, innerTabCount);
-                fputs("<identifier> ", outputFile);
-                fputs(line, outputFile);
-                fseek(outputFile, -1, SEEK_CUR);
-                fputs(" </identifier>\n", outputFile);
+                fgets_nl(line, sizeof(line), inputFile);
+                fputterminal(line, "identifier", innerTabCount, outputFile);
                 
                 fsetpos(inputFile, &pos);
             }
             break;
         }
         case TokenTypeSymbol:
-            if (!strcmp(line, "(\n")) {
-                fputtabs(outputFile, innerTabCount);
-                fputs("<symbol> ( </symbol>\n", outputFile);
+            if (!strcmp(line, "(")) {
+                fputterminal("(", "symbol", innerTabCount, outputFile);
                 
                 compileExpression(inputFile, outputFile, innerTabCount);
                 
-                fgets(line, sizeof(line), inputFile);
-                if (!strcmp(line, ")\n")) {
-                    fputtabs(outputFile, innerTabCount);
-                    fputs("<symbol> ) </symbol>\n", outputFile);
+                fgets_nl(line, sizeof(line), inputFile);
+                if (!strcmp(line, ")")) {
+                    fputterminal(")", "symbol", innerTabCount, outputFile);
                 } else {
                     printf("Expected ')' to end expression!\n");
                     exit(1);
                 }
-            } else if (!strcmp(line, "-\n") || !strcmp(line, "~\n")) {
-                fputtabs(outputFile, innerTabCount);
-                fputs("<symbol> ", outputFile);
-                fputs(line, outputFile);
-                fseek(outputFile, -1, SEEK_CUR);
-                fputs(" </symbol>\n", outputFile);
+            } else if (!strcmp(line, "-") || !strcmp(line, "~")) {
+                fputterminal(line, "symbol", innerTabCount, outputFile);
                 
                 compileTerm(inputFile, outputFile, innerTabCount);
             }
@@ -435,7 +376,7 @@ void compileTerm(FILE *inputFile, FILE *outputFile, int tabCount) {
 
 void compileExpression(FILE *inputFile, FILE *outputFile, int tabCount) {
     char line[256];
-    int outerTabCount = tabCount; //TODO: need a better naming system for the tab counts
+    int outerTabCount = tabCount;
     int innerTabCount = tabCount + 1;
     
     fputtabs(outputFile, outerTabCount);
@@ -447,13 +388,9 @@ void compileExpression(FILE *inputFile, FILE *outputFile, int tabCount) {
         fpos_t pos;
         fgetpos(inputFile, &pos);
         
-        fgets(line, sizeof(line), inputFile);
-        if (!strcmp(line, "+\n") || !strcmp(line, "-\n") || !strcmp(line, "*\n") || !strcmp(line, "/\n") || !strcmp(line, "&amp;\n") || !strcmp(line, "|\n") || !strcmp(line, "&lt;\n") || !strcmp(line, "&gt;\n") || !strcmp(line, "=\n")) {
-            fputtabs(outputFile, innerTabCount);
-            fputs("<symbol> ", outputFile);
-            fputs(line, outputFile);
-            fseek(outputFile, -1, SEEK_CUR);
-            fputs(" </symbol>\n", outputFile);
+        fgets_nl(line, sizeof(line), inputFile);
+        if (!strcmp(line, "+") || !strcmp(line, "-") || !strcmp(line, "*") || !strcmp(line, "/") || !strcmp(line, "&amp;") || !strcmp(line, "|") || !strcmp(line, "&lt;") || !strcmp(line, "&gt;") || !strcmp(line, "=")) {
+            fputterminal(line, "symbol", innerTabCount, outputFile);
         } else {
             fsetpos(inputFile, &pos);
             break;
@@ -476,60 +413,46 @@ void compileStatements(FILE *inputFile, FILE *outputFile, int tabCount) {
         fpos_t pos;
         fgetpos(inputFile, &pos);
         
-        fgets(line, sizeof(line), inputFile);
-        if (!strcmp(line, "let\n") || !strcmp(line, "if\n") || !strcmp(line, "while\n") || !strcmp(line, "do\n") || !strcmp(line, "return\n")) {
+        fgets_nl(line, sizeof(line), inputFile);
+        if (!strcmp(line, "let") || !strcmp(line, "if") || !strcmp(line, "while") || !strcmp(line, "do") || !strcmp(line, "return")) {
             char *statementType = malloc(strlen(line));
             strcpy(statementType, line);
             
             fputtabs(outputFile, innerTabCount);
-            fputs("<", outputFile);
-            fputs(statementType, outputFile);
-            fseek(outputFile, -1, SEEK_CUR);
-            fputs("Statement>\n", outputFile);
+            fprintf(outputFile, "<%sStatement>\n", statementType);
             
             int newInnerTab = innerTabCount + 1;
             
-            fputtabs(outputFile, newInnerTab);
-            fputs("<keyword> ", outputFile);
-            fputs(statementType, outputFile);
-            fseek(outputFile, -1, SEEK_CUR);
-            fputs(" </keyword>\n", outputFile);
+            fputterminal(statementType, "keyword", newInnerTab, outputFile);
             
-            if (!strcmp(line, "let\n")) {
-                fgets(line, sizeof(line), inputFile);
+            if (!strcmp(line, "let")) {
+                fgets_nl(line, sizeof(line), inputFile);
                 if (tokenType(line) == TokenTypeIdentifier) {
-                    fputtabs(outputFile, newInnerTab); //TODO: make functions to print these out??
-                    fputs("<identifier> ", outputFile);
-                    fputs(line, outputFile);
-                    fseek(outputFile, -1, SEEK_CUR);
-                    fputs(" </identifier>\n", outputFile);
+                    fputterminal(line, "identifier", newInnerTab, outputFile);
                 } else {
                     printf("Local var name must be of token type 'identifier'!\n");
                     exit(1);
                 }
                 
-                fgets(line, sizeof(line), inputFile);
-                if (!strcmp(line, "[\n")) {
-                    fputtabs(outputFile, newInnerTab);
-                    fputs("<symbol> [ </symbol>\n", outputFile);
+                fgets_nl(line, sizeof(line), inputFile);
+                if (!strcmp(line, "[")) {
+                    fputterminal("[", "symbol", newInnerTab, outputFile);
                     
                     compileExpression(inputFile, outputFile, newInnerTab);
                     
-                    fgets(line, sizeof(line), inputFile);
-                    if (!strcmp(line, "]\n")) {
-                        fputtabs(outputFile, newInnerTab);
-                        fputs("<symbol> ] </symbol>\n", outputFile);
+                    fgets_nl(line, sizeof(line), inputFile);
+                    if (!strcmp(line, "]")) {
+                        fputterminal("]", "symbol", newInnerTab, outputFile);
                     } else {
                         printf("Expected ']' to end expression!\n");
                         exit(1);
                     }
                     
-                    fgets(line, sizeof(line), inputFile);
+                    fgets_nl(line, sizeof(line), inputFile);
                 }
                 
-                if (!strcmp(line, "=\n")) {
-                    fputtabs(outputFile, newInnerTab);
-                    fputs("<symbol> = </symbol>\n", outputFile);
+                if (!strcmp(line, "=")) {
+                    fputterminal("=", "symbol", newInnerTab, outputFile);
                 } else {
                     printf("Expected '=' after let statement declaration!\n");
                     exit(1);
@@ -537,19 +460,17 @@ void compileStatements(FILE *inputFile, FILE *outputFile, int tabCount) {
                 
                 compileExpression(inputFile, outputFile, newInnerTab);
                 
-                fgets(line, sizeof(line), inputFile);
-                if (!strcmp(line, ";\n")) {
-                    fputtabs(outputFile, newInnerTab);
-                    fputs("<symbol> ; </symbol>\n", outputFile);
+                fgets_nl(line, sizeof(line), inputFile);
+                if (!strcmp(line, ";")) {
+                    fputterminal(";", "symbol", newInnerTab, outputFile);
                 } else {
                     printf("Expected ';' at end of 'let' statement!\n");
                     exit(1);
                 }
-            } else if (!strcmp(line, "if\n") || !strcmp(line, "while\n")) {
-                fgets(line, sizeof(line), inputFile);
-                if (!strcmp(line, "(\n")) {
-                    fputtabs(outputFile, newInnerTab);
-                    fputs("<symbol> ( </symbol>\n", outputFile);
+            } else if (!strcmp(line, "if") || !strcmp(line, "while")) {
+                fgets_nl(line, sizeof(line), inputFile);
+                if (!strcmp(line, "(")) {
+                    fputterminal("(", "symbol", newInnerTab, outputFile);
                 } else {
                     printf("Expected '(' at beginning of %s expression!\n", statementType);
                     exit(1);
@@ -557,19 +478,17 @@ void compileStatements(FILE *inputFile, FILE *outputFile, int tabCount) {
                 
                 compileExpression(inputFile, outputFile, newInnerTab);
                 
-                fgets(line, sizeof(line), inputFile);
-                if (!strcmp(line, ")\n")) {
-                    fputtabs(outputFile, newInnerTab);
-                    fputs("<symbol> ) </symbol>\n", outputFile);
+                fgets_nl(line, sizeof(line), inputFile);
+                if (!strcmp(line, ")")) {
+                    fputterminal(")", "symbol", newInnerTab, outputFile);
                 } else {
                     printf("Expected ')' at end of %s expression!\n", statementType);
                     exit(1);
                 }
                 
-                fgets(line, sizeof(line), inputFile);
-                if (!strcmp(line, "{\n")) {
-                    fputtabs(outputFile, newInnerTab);
-                    fputs("<symbol> { </symbol>\n", outputFile);
+                fgets_nl(line, sizeof(line), inputFile);
+                if (!strcmp(line, "{")) {
+                    fputterminal("{", "symbol", newInnerTab, outputFile);
                 } else {
                     printf("Expected '{' at beginning of %s statement!\n", statementType);
                     exit(1);
@@ -577,29 +496,26 @@ void compileStatements(FILE *inputFile, FILE *outputFile, int tabCount) {
                 
                 compileStatements(inputFile, outputFile, newInnerTab);
                 
-                fgets(line, sizeof(line), inputFile);
-                if (!strcmp(line, "}\n")) {
-                    fputtabs(outputFile, newInnerTab);
-                    fputs("<symbol> } </symbol>\n", outputFile);
+                fgets_nl(line, sizeof(line), inputFile);
+                if (!strcmp(line, "}")) {
+                    fputterminal("}", "symbol", newInnerTab, outputFile);
                 } else {
                     printf("Expected '}' at end of %s statement!\n", statementType);
                     exit(1);
                 }
                 
-                if (!strcmp(statementType, "if\n")) {
+                if (!strcmp(statementType, "if")) {
                     fpos_t pos;
                     fgetpos(inputFile, &pos);
                     
-                    fgets(line, sizeof(line), inputFile);
-                    if (!strcmp(line, "else\n")) {
-                        fputtabs(outputFile, newInnerTab);
-                        fputs("<keyword> else </keyword>\n", outputFile);
+                    fgets_nl(line, sizeof(line), inputFile);
+                    if (!strcmp(line, "else")) {
+                        fputterminal("else", "keyword", newInnerTab, outputFile);
                         
                         //TODO: make this a function because it's the same as above??
-                        fgets(line, sizeof(line), inputFile);
-                        if (!strcmp(line, "{\n")) {
-                            fputtabs(outputFile, newInnerTab);
-                            fputs("<symbol> { </symbol>\n", outputFile);
+                        fgets_nl(line, sizeof(line), inputFile);
+                        if (!strcmp(line, "{")) {
+                            fputterminal("{", "symbol", newInnerTab, outputFile);
                         } else {
                             printf("Expected '{' at beginning of 'else' statement!\n");
                             exit(1);
@@ -607,10 +523,9 @@ void compileStatements(FILE *inputFile, FILE *outputFile, int tabCount) {
                         
                         compileStatements(inputFile, outputFile, newInnerTab);
                         
-                        fgets(line, sizeof(line), inputFile);
-                        if (!strcmp(line, "}\n")) {
-                            fputtabs(outputFile, newInnerTab);
-                            fputs("<symbol> } </symbol>\n", outputFile);
+                        fgets_nl(line, sizeof(line), inputFile);
+                        if (!strcmp(line, "}")) {
+                            fputterminal("}", "symbol", newInnerTab, outputFile);
                         } else {
                             printf("Expected '}' at end of 'else' statement!\n");
                             exit(1);
@@ -619,32 +534,30 @@ void compileStatements(FILE *inputFile, FILE *outputFile, int tabCount) {
                         fsetpos(inputFile, &pos);
                     }
                 }
-            } else if (!strcmp(line, "do\n")) {
+            } else if (!strcmp(line, "do")) {
                 compileSubroutineCall(inputFile, outputFile, newInnerTab);
                 
-                fgets(line, sizeof(line), inputFile);
-                if (!strcmp(line, ";\n")) {
-                    fputtabs(outputFile, newInnerTab);
-                    fputs("<symbol> ; </symbol>\n", outputFile);
+                fgets_nl(line, sizeof(line), inputFile);
+                if (!strcmp(line, ";")) {
+                    fputterminal(";", "symbol", newInnerTab, outputFile);
                 } else {
                     printf("Expected ';' at end of 'do' statement!\n");
                     exit(1);
                 }
-            } else if (!strcmp(line, "return\n")) {
+            } else if (!strcmp(line, "return")) {
                 fpos_t pos;
                 fgetpos(inputFile, &pos);
                 
-                fgets(line, sizeof(line), inputFile);
-                if (strcmp(line, ";\n") != 0) {
+                fgets_nl(line, sizeof(line), inputFile);
+                if (strcmp(line, ";") != 0) {
                     fsetpos(inputFile, &pos);
                     compileExpression(inputFile, outputFile, newInnerTab);
                     
-                    fgets(line, sizeof(line), inputFile);
+                    fgets_nl(line, sizeof(line), inputFile);
                 }
                 
-                if (!strcmp(line, ";\n")) {
-                    fputtabs(outputFile, newInnerTab);
-                    fputs("<symbol> ; </symbol>\n", outputFile);
+                if (!strcmp(line, ";")) {
+                    fputterminal(";", "symbol", newInnerTab, outputFile);
                 } else {
                     printf("Expected ';' at end of 'return' statement!\n");
                     exit(1);
@@ -652,13 +565,9 @@ void compileStatements(FILE *inputFile, FILE *outputFile, int tabCount) {
             }
             
             fputtabs(outputFile, innerTabCount);
-            fputs("</", outputFile);
-            fputs(statementType, outputFile);
-            fseek(outputFile, -1, SEEK_CUR);
-            fputs("Statement>\n", outputFile);
-            
+            fprintf(outputFile, "</%sStatement>\n", statementType);
             free(statementType);
-        } else if (!strcmp(line, "}\n")) {
+        } else if (!strcmp(line, "}")) {
             fsetpos(inputFile, &pos);
             break;
         } else {
@@ -679,13 +588,9 @@ void compileSubroutineBody(FILE *inputFile, FILE *outputFile, int tabCount) {
     fputtabs(outputFile, outerTabCount);
     fputs("<subroutineBody>\n", outputFile);
     
-    fgets(line, sizeof(line), inputFile);
-    if (!strcmp(line, "{\n")) {
-        fputtabs(outputFile, innerTabCount);
-        fputs("<symbol> ", outputFile);
-        fputs(line, outputFile);
-        fseek(outputFile, -1, SEEK_CUR);
-        fputs(" </symbol>\n", outputFile);
+    fgets_nl(line, sizeof(line), inputFile);
+    if (!strcmp(line, "{")) {
+        fputterminal("{", "symbol", innerTabCount, outputFile);
     } else {
         printf("Subroutine Body should begin with '{'!\n");
         exit(1);
@@ -695,18 +600,13 @@ void compileSubroutineBody(FILE *inputFile, FILE *outputFile, int tabCount) {
         fpos_t pos;
         fgetpos(inputFile, &pos);
         
-        fgets(line, sizeof(line), inputFile);
-        if (!strcmp(line, "var\n")) {
+        fgets_nl(line, sizeof(line), inputFile);
+        if (!strcmp(line, "var")) {
             compileVarDeclaration(inputFile, outputFile, innerTabCount);
-        } else if (!strcmp(line, "}\n")) {
-            fputtabs(outputFile, innerTabCount);
-            fputs("<symbol> ", outputFile);
-            fputs(line, outputFile);
-            fseek(outputFile, -1, SEEK_CUR);
-            fputs(" </symbol>\n", outputFile);
-            
+        } else if (!strcmp(line, "}")) {
+            fputterminal("}", "symbol", innerTabCount, outputFile);
             break;
-        } else if (!strcmp(line, "let\n") || !strcmp(line, "if\n") || !strcmp(line, "while\n") || !strcmp(line, "do\n") || !strcmp(line, "return\n")) {
+        } else if (!strcmp(line, "let") || !strcmp(line, "if") || !strcmp(line, "while") || !strcmp(line, "do") || !strcmp(line, "return")) {
             fsetpos(inputFile, &pos);
             compileStatements(inputFile, outputFile, innerTabCount);
         } else {
@@ -727,60 +627,38 @@ void compileSubroutineDeclaration(char *subType, FILE *inputFile, FILE *outputFi
     fputtabs(outputFile, outerTabCount);
     fputs("<subroutineDec>\n", outputFile);
     
-    fputtabs(outputFile, innerTabCount);
-    fputs("<keyword> ", outputFile);
-    fputs(subType, outputFile);
-    fseek(outputFile, -1, SEEK_CUR);
-    fputs(" </keyword>\n", outputFile);
+    fputterminal(subType, "keyword", innerTabCount, outputFile);
     
-    fgets(line, sizeof(line), inputFile);
+    fgets_nl(line, sizeof(line), inputFile);
     TokenType lineType = tokenType(line);
-    if (lineType == TokenTypeIdentifier || !strcmp(line, "int\n") || !strcmp(line, "char\n") || !strcmp(line, "boolean\n") || !strcmp(line, "void\n")) { //TODO: remove dupe
-        char *type = malloc(11);
-        type = (lineType == TokenTypeIdentifier) ? "identifier" : "keyword";
-        
-        fputtabs(outputFile, innerTabCount);
-        fprintf(outputFile, "<%s> %s", type, line);
-        fseek(outputFile, -1, SEEK_CUR);
-        fprintf(outputFile, " </%s>\n", type);
+    if (lineType == TokenTypeIdentifier || !strcmp(line, "int") || !strcmp(line, "char") || !strcmp(line, "boolean") || !strcmp(line, "void")) { //TODO: remove dupe
+        fputterminal(line, (lineType == TokenTypeIdentifier) ? "identifier" : "keyword", innerTabCount, outputFile);
     } else {
         printf("Class subroutine declaration does not have a valid return type!\n");
         exit(1);
     }
     
-    fgets(line, sizeof(line), inputFile);
+    fgets_nl(line, sizeof(line), inputFile);
     if (tokenType(line) == TokenTypeIdentifier) {
-        fputtabs(outputFile, innerTabCount);
-        fputs("<identifier> ", outputFile);
-        fputs(line, outputFile);
-        fseek(outputFile, -1, SEEK_CUR);
-        fputs(" </identifier>\n", outputFile);
+        fputterminal(line, "identifier", innerTabCount, outputFile);
     } else {
         printf("Class subroutine name must have a valid name!\n");
         exit(1);
     }
     
-    fgets(line, sizeof(line), inputFile);
-    if (!strcmp(line, "(\n")) {
-        fputtabs(outputFile, innerTabCount);
-        fputs("<symbol> ", outputFile);
-        fputs(line, outputFile);
-        fseek(outputFile, -1, SEEK_CUR);
-        fputs(" </symbol>\n", outputFile);
+    fgets_nl(line, sizeof(line), inputFile);
+    if (!strcmp(line, "(")) {
+        fputterminal("(", "symbol", innerTabCount, outputFile);
     } else {
         printf("Class subroutine missing '('!\n");
         exit(1);
     }
     
-    compileParameterList(inputFile, outputFile, innerTabCount); //TODO: do i need a separate function for situations like this? maybe not...a comment could do
+    compileParameterList(inputFile, outputFile, innerTabCount);
     
-    fgets(line, sizeof(line), inputFile);
-    if (!strcmp(line, ")\n")) {
-        fputtabs(outputFile, innerTabCount);
-        fputs("<symbol> ", outputFile);
-        fputs(line, outputFile);
-        fseek(outputFile, -1, SEEK_CUR);
-        fputs(" </symbol>\n", outputFile);
+    fgets_nl(line, sizeof(line), inputFile);
+    if (!strcmp(line, ")")) {
+        fputterminal(")", "symbol", innerTabCount, outputFile);
     } else {
         printf("Class subroutine missing ')' at end of parameter list!\n");
         exit(1);
@@ -794,45 +672,40 @@ void compileSubroutineDeclaration(char *subType, FILE *inputFile, FILE *outputFi
 
 void compileClass(FILE *inputFile, FILE *outputFile) {
     char line[256];
+    int tabCount = 1;
     
-    fgets(line, sizeof(line), inputFile);
-    if (!strcmp(line, "class\n")) {
-        fputs("<class>\n\t<keyword> class </keyword>\n", outputFile);
+    fgets_nl(line, sizeof(line), inputFile);
+    if (!strcmp(line, "class")) {
+        fputs("<class>\n", outputFile);
+        fputterminal("class", "keyword", tabCount, outputFile);
     } else {
         printf("File does not begin with a class declaration!\n");
         exit(1);
     }
     
-    int tabCount = 1;
-    fgets(line, sizeof(line), inputFile);
+    fgets_nl(line, sizeof(line), inputFile);
     if (tokenType(line) == TokenTypeIdentifier) {
-        fputtabs(outputFile, tabCount);
-        fputs("<identifier> ", outputFile);
-        fputs(line, outputFile);
-        fseek(outputFile, -1, SEEK_CUR);
-        fputs(" </identifier>\n", outputFile);
+        fputterminal(line, "identifier", tabCount, outputFile);
     } else {
         printf("Class declaration has no class name!\n");
         exit(1);
     }
     
-    fgets(line, sizeof(line), inputFile);
-    if (!strcmp(line, "{\n")) {
-        fputtabs(outputFile, tabCount);
-        fputs("<symbol> { </symbol>\n", outputFile);
+    fgets_nl(line, sizeof(line), inputFile);
+    if (!strcmp(line, "{")) {
+        fputterminal("{", "symbol", tabCount, outputFile);
     } else {
         printf("Class declaration is missing '{'!\n");
         exit(1);
     }
     
-    while (fgets(line, sizeof(line), inputFile)) {
-        if (!strcmp(line, "field\n") || !strcmp(line, "static\n")) {
+    while (fgets_nl(line, sizeof(line), inputFile)) {
+        if (!strcmp(line, "field") || !strcmp(line, "static")) {
             compileClassVarDeclaration(line, inputFile, outputFile, tabCount);
-        } else if (!strcmp(line, "constructor\n") || !strcmp(line, "function\n") || !strcmp(line, "method\n")) {
+        } else if (!strcmp(line, "constructor") || !strcmp(line, "function") || !strcmp(line, "method")) {
             compileSubroutineDeclaration(line, inputFile, outputFile, tabCount);
-        } else if (!strcmp(line, "}\n")) {
-            fputtabs(outputFile, tabCount);
-            fputs("<symbol> } </symbol>\n", outputFile);
+        } else if (!strcmp(line, "}")) {
+            fputterminal("}", "symbol", tabCount, outputFile);
         } else {
             printf("Unrecognized keyword specified in class!\n");
             exit(1);
@@ -967,7 +840,7 @@ int main(int argc, const char * argv[]) {
         char *outputPath = pathWithInputPath(inputPath, "_stanOutput.xml");
         FILE *outputFile = fopen(outputPath, "w");
         
-        //parser
+        //parse
         rewind(helperFile);
         compileClass(helperFile, outputFile);
         
