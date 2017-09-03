@@ -127,7 +127,7 @@ void compileVarBody(FILE *inputFile, FILE *outputFile, int tabCount) {
     }
 }
 
-void compileClassVarDeclaration(char *varType, FILE *inputFile, FILE *outputFile, int tabCount) { //TODO: combine class var and var dec?
+void compileClassVarDeclaration(char *varType, FILE *inputFile, FILE *outputFile, int tabCount) {
     int outerTabCount = tabCount;
     int innerTabCount = tabCount + 1;
     
@@ -263,7 +263,7 @@ void compileSubroutineCall(FILE *inputFile, FILE *outputFile, int tabCount) {
         
         fgets_nl(line, sizeof(line), inputFile);
         if (!strcmp(line, "(")) {
-            fputterminal("(", "symbol", tabCount, outputFile); //TODO: make this whole chunk a function, because it is used above??
+            fputterminal("(", "symbol", tabCount, outputFile);
             
             compileExpressionList(inputFile, outputFile, tabCount);
             
@@ -512,7 +512,6 @@ void compileStatements(FILE *inputFile, FILE *outputFile, int tabCount) {
                     if (!strcmp(line, "else")) {
                         fputterminal("else", "keyword", newInnerTab, outputFile);
                         
-                        //TODO: make this a function because it's the same as above??
                         fgets_nl(line, sizeof(line), inputFile);
                         if (!strcmp(line, "{")) {
                             fputterminal("{", "symbol", newInnerTab, outputFile);
@@ -631,7 +630,7 @@ void compileSubroutineDeclaration(char *subType, FILE *inputFile, FILE *outputFi
     
     fgets_nl(line, sizeof(line), inputFile);
     TokenType lineType = tokenType(line);
-    if (lineType == TokenTypeIdentifier || !strcmp(line, "int") || !strcmp(line, "char") || !strcmp(line, "boolean") || !strcmp(line, "void")) { //TODO: remove dupe
+    if (lineType == TokenTypeIdentifier || !strcmp(line, "int") || !strcmp(line, "char") || !strcmp(line, "boolean") || !strcmp(line, "void")) {
         fputterminal(line, (lineType == TokenTypeIdentifier) ? "identifier" : "keyword", innerTabCount, outputFile);
     } else {
         printf("Class subroutine declaration does not have a valid return type!\n");
