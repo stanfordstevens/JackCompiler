@@ -923,17 +923,13 @@ int main(int argc, const char * argv[]) {
             for (int i = 0; i < strlen(trimmed); i++) {
                 char c = trimmed[i];
                 
-                fpos_t pos;
-                fgetpos(helperFile, &pos);
                 fseek(helperFile, -1, SEEK_CUR);
                 char previous = fgetc(helperFile);
-                fsetpos(helperFile, &pos);
                 
                 if (printingString && c != '"') {
                     fputc(c, helperFile);
                 } else if (c == '/' && i+1 < strlen(trimmed) && trimmed[i+1] == '/') {
-                    //do nothing
-                    break;
+                    break; //skip rest of line
                 } else if (isSymbol(c)) {
                     if (previous != '\n') {
                         fputc('\n', helperFile);
@@ -957,10 +953,8 @@ int main(int argc, const char * argv[]) {
                     
                     fputc(c, helperFile);
                     printingString = !printingString;
-                } else if (c == ' ') {
-                    if (previous != '\n') {
-                        fputc('\n', helperFile);
-                    }
+                } else if (c == ' ' && previous != '\n') {
+                    fputc('\n', helperFile);
                 } else {
                     fputc(c, helperFile);
                 }
