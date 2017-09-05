@@ -306,7 +306,7 @@ void compileExpressionList(FILE *inputFile, FILE *outputFile) {
             fsetpos(inputFile, &pos);
             break;
         } else if (!strcmp(line, ",")) {
-            fputterminal(",", "symbol", outputFile);
+            //do nothing
         } else {
             fsetpos(inputFile, &pos);
             compileExpression(inputFile, outputFile);
@@ -318,47 +318,33 @@ void compileSubroutineCall(FILE *inputFile, FILE *outputFile) {
     char line[256];
     
     fgets_nl(line, sizeof(line), inputFile);
-    if (tokenType(line) == TokenTypeIdentifier) {
-        fputterminal(line, "identifier", outputFile);
-    } else {
+    if (tokenType(line) != TokenTypeIdentifier) {
         printf("Expected identifier at beginning of subroutine call!\n");
         exit(1);
     }
     
     fgets_nl(line, sizeof(line), inputFile);
     if (!strcmp(line, "(")) {
-        fputterminal("(", "symbol", outputFile);
-        
         compileExpressionList(inputFile, outputFile);
 
         fgets_nl(line, sizeof(line), inputFile);
-        if (!strcmp(line, ")")) {
-            fputterminal(")", "symbol", outputFile);
-        } else {
+        if (strcmp(line, ")")) {
             printf("Expected ')' to end expression list!\n");
             exit(1);
         }
     } else if (!strcmp(line, ".")) {
-        fputterminal(".", "symbol", outputFile);
-        
         fgets_nl(line, sizeof(line), inputFile);
-        if (tokenType(line) == TokenTypeIdentifier) {
-            fputterminal(line, "identifier", outputFile);
-        } else {
+        if (tokenType(line) != TokenTypeIdentifier) {
             printf("Invalid subroutine name!\n");
             exit(1);
         }
         
         fgets_nl(line, sizeof(line), inputFile);
         if (!strcmp(line, "(")) {
-            fputterminal("(", "symbol", outputFile);
-            
             compileExpressionList(inputFile, outputFile);
             
             fgets_nl(line, sizeof(line), inputFile);
-            if (!strcmp(line, ")")) {
-                fputterminal(")", "symbol", outputFile);
-            } else {
+            if (strcmp(line, ")")) {
                 printf("Expected ')' to end expression list!\n");
                 exit(1);
             }
@@ -388,7 +374,7 @@ void compileTerm(FILE *inputFile, FILE *outputFile) {
             //TODO: not sure what to do here
             break;
         case TokenTypeKeyword:
-            fputterminal(line, "keyword", outputFile);
+            //TODO: not sure what to do here
             break;
         case TokenTypeIdentifier:
         {
