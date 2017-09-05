@@ -31,12 +31,12 @@ typedef struct Symbol {
     //TODO: symbol index?? i dont understand how the index works for scope..
 } Symbol;
 
-size_t *number_of_class_symbols = 0;
-size_t *length_of_class_symbols = 0;
+size_t *number_of_class_symbols;
+size_t *length_of_class_symbols;
 Symbol **class_symbols;
 
-size_t *number_of_sub_symbols = 0;
-size_t *length_of_sub_symbols = 0;
+size_t *number_of_sub_symbols;
+size_t *length_of_sub_symbols;
 Symbol **sub_symbols;
 
 #pragma mark Symbol Table
