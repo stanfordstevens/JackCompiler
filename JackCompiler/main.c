@@ -41,6 +41,20 @@ Symbol **sub_symbols;
 
 #pragma mark Symbol Table
 
+void freeSymbolTable(Symbol **symbolTable, size_t *numberOfSymbols) {
+    if (symbolTable) {
+        for (int i = 0; i < *numberOfSymbols; i++) {
+            Symbol *symbol = symbolTable[i];
+            free(symbol->kind);
+            free(symbol->name);
+            free(symbol->type);
+            free(symbol);
+        }
+        
+        free(symbolTable);
+    }
+}
+
 Symbol **add_symbol(Symbol **symbolTable, Symbol *symbol) {
     size_t *number_of_symbols = (symbolTable == class_symbols) ? number_of_class_symbols : number_of_sub_symbols;
     size_t *length_of_symbols = (symbolTable == class_symbols) ? length_of_class_symbols : length_of_class_symbols;
@@ -201,7 +215,7 @@ void compileVarBody(FILE *inputFile, FILE *outputFile, int tabCount, Symbol *new
         if (tokenType(line) == TokenTypeIdentifier) {
             newSymbol->name = malloc(strlen(line));
             strcpy(newSymbol->name, line);
-            printf("fuck me: %s\n", newSymbol->name);
+            
             fputsymbol(outputFile, newSymbol, tabCount);
         } else {
             printf("Var name must be of token type 'identifier'!\n");
@@ -263,7 +277,9 @@ void compileVarDeclaration(FILE *inputFile, FILE *outputFile, int tabCount) {
     fputterminal("var", "keyword", innerTabCount, outputFile);
     
     Symbol *newSymbol = malloc(sizeof(Symbol));
-    newSymbol->kind = "var";
+    char *kind = "var";
+    newSymbol->kind = malloc(strlen(kind));
+    strcpy(newSymbol->kind, kind);
     sub_symbols = add_symbol(sub_symbols, newSymbol);
     
     compileVarBody(inputFile, outputFile, innerTabCount, newSymbol, sub_symbols);
@@ -292,7 +308,9 @@ void compileParameterList(FILE *inputFile, FILE *outputFile, int tabCount) {
             break;
         } else {
             Symbol *newSymbol = malloc(sizeof(Symbol));
-            newSymbol->kind = "argument";
+            char *kind = "argument";
+            newSymbol->kind = malloc(strlen(kind));
+            strcpy(newSymbol->kind, kind);
             sub_symbols = add_symbol(sub_symbols, newSymbol);
             
             TokenType lineType = tokenType(line);
@@ -768,9 +786,7 @@ void compileSubroutineDeclaration(char *subType, FILE *inputFile, FILE *outputFi
     int innerTabCount = tabCount + 1;
     
     //reinitialize sub_symbols because new subroutine is being compiled
-    if (sub_symbols) {
-        free(sub_symbols);
-    }
+    freeSymbolTable(sub_symbols, number_of_sub_symbols);
     sub_symbols = initialize_symbol_table(length_of_sub_symbols, number_of_sub_symbols);
     
     fputtabs(outputFile, outerTabCount);
@@ -999,7 +1015,11 @@ int main(int argc, const char * argv[]) {
         compileClass(helperFile, outputFile);
         
         //cleanup
-        //TODO: why does program crash when i free the symbol tables??
+        freeSymbolTable(class_symbols, number_of_class_symbols);
+        class_symbols = NULL;
+        
+        freeSymbolTable(sub_symbols, number_of_sub_symbols);
+        sub_symbols = NULL;
         
         free(length_of_class_symbols);
         free(length_of_sub_symbols);
