@@ -156,14 +156,6 @@ char *fgets_nl(char *buffer, int size, FILE *file) {
 
 #pragma mark File Printing
 
-void fputsymbol(FILE *outputFile, Symbol *symbol) {
-    fprintf(outputFile, "name: %s, kind: %s, type: %s\n", symbol->name, symbol->kind, symbol->type);
-}
-
-void fputterminal(char *terminal, char *tag, FILE *outputFile) {
-    fprintf(outputFile, "<%s> %s </%s>\n", tag, terminal, tag);
-}
-
 TokenType tokenType(char *token) {
     if (isSymbol(token[0])) {
         return TokenTypeSymbol;
@@ -191,8 +183,6 @@ void compileVarBody(FILE *inputFile, FILE *outputFile, Symbol *newSymbol, Symbol
     fgets_nl(line, sizeof(line), inputFile);
     TokenType lineType = tokenType(line);
     if (lineType == TokenTypeIdentifier || !strcmp(line, "int") || !strcmp(line, "char") || !strcmp(line, "boolean")) {
-        fputterminal(line, (lineType == TokenTypeIdentifier) ? "identifier" : "keyword", outputFile);
-        
         newSymbol->type = malloc(strlen(line));
         strcpy(newSymbol->type, line);
     } else {
@@ -205,8 +195,6 @@ void compileVarBody(FILE *inputFile, FILE *outputFile, Symbol *newSymbol, Symbol
         if (tokenType(line) == TokenTypeIdentifier) {
             newSymbol->name = malloc(strlen(line));
             strcpy(newSymbol->name, line);
-            
-            fputsymbol(outputFile, newSymbol);
         } else {
             printf("Var name must be of token type 'identifier'!\n");
             exit(1);
@@ -214,8 +202,6 @@ void compileVarBody(FILE *inputFile, FILE *outputFile, Symbol *newSymbol, Symbol
         
         fgets_nl(line, sizeof(line), inputFile);
         if (!strcmp(line, ";") || !strcmp(line, ",")) {
-            fputterminal(line, "symbol", outputFile);
-            
             if (!strcmp(line, ";")) {
                 break;
             } else {
@@ -238,25 +224,15 @@ void compileVarBody(FILE *inputFile, FILE *outputFile, Symbol *newSymbol, Symbol
 }
 
 void compileClassVarDeclaration(char *varType, FILE *inputFile, FILE *outputFile) {
-    fputs("<classVarDec>\n", outputFile);
-    
-    fputterminal(varType, "keyword", outputFile);
-    
     Symbol *newSymbol = malloc(sizeof(Symbol));
     newSymbol->kind = malloc(strlen(varType));
     strcpy(newSymbol->kind, varType);
     class_symbols = add_symbol(class_symbols, newSymbol);
     
     compileVarBody(inputFile, outputFile, newSymbol, class_symbols);
-    
-    fputs("</classVarDec>\n", outputFile);
 }
 
 void compileVarDeclaration(FILE *inputFile, FILE *outputFile) {
-    fputs("<varDec>\n", outputFile);
-    
-    fputterminal("var", "keyword", outputFile);
-    
     Symbol *newSymbol = malloc(sizeof(Symbol));
     char *kind = "var";
     newSymbol->kind = malloc(strlen(kind));
@@ -264,26 +240,25 @@ void compileVarDeclaration(FILE *inputFile, FILE *outputFile) {
     sub_symbols = add_symbol(sub_symbols, newSymbol);
     
     compileVarBody(inputFile, outputFile, newSymbol, sub_symbols);
-    
-    fputs("</varDec>\n", outputFile);
 }
 
-void compileParameterList(FILE *inputFile, FILE *outputFile) {
+int compileParameterList(FILE *inputFile, FILE *outputFile) {
     char line[256];
     
-    fputs("<parameterList>\n", outputFile);
-    
+    int count = 0;
     while (1) {
         fpos_t pos;
         fgetpos(inputFile, &pos);
         
         fgets_nl(line, sizeof(line), inputFile);
         if (!strcmp(line, ",")) {
-            fputterminal(line, "symbol", outputFile);
+            //do nothing
         } else if (!strcmp(line, ")")) {
             fsetpos(inputFile, &pos);
             break;
         } else {
+            count++;
+            
             Symbol *newSymbol = malloc(sizeof(Symbol));
             char *kind = "argument";
             newSymbol->kind = malloc(strlen(kind));
@@ -292,8 +267,6 @@ void compileParameterList(FILE *inputFile, FILE *outputFile) {
             
             TokenType lineType = tokenType(line);
             if (lineType == TokenTypeIdentifier || !strcmp(line, "int") || !strcmp(line, "char") || !strcmp(line, "boolean") || !strcmp(line, "void")) {
-                fputterminal(line, (lineType == TokenTypeIdentifier) ? "identifier" : "keyword", outputFile);
-                
                 newSymbol->type = malloc(strlen(line));
                 strcpy(newSymbol->type, line);
             } else {
@@ -305,16 +278,14 @@ void compileParameterList(FILE *inputFile, FILE *outputFile) {
             if (tokenType(line) == TokenTypeIdentifier) {
                 newSymbol->name = malloc(strlen(line));
                 strcpy(newSymbol->name, line);
-                
-                fputsymbol(outputFile, newSymbol);
             } else {
-                printf("Class var name must be of token type 'identifier'!\n");
+                printf("Subroutine parameter does not have a valid name!\n");
                 exit(1);
             }
         }
     }
     
-    fputs("</parameterList>\n", outputFile);
+    return count;
 }
 
 void compileExpression(FILE *inputFile, FILE *outputFile);
@@ -403,9 +374,7 @@ void compileSubroutineCall(FILE *inputFile, FILE *outputFile) {
 
 void compileTerm(FILE *inputFile, FILE *outputFile) {
     char line[256];
-    
-    fputs("<term>\n", outputFile);
-    
+
     fpos_t initialTermPos;
     fgetpos(inputFile, &initialTermPos);
     
@@ -413,14 +382,10 @@ void compileTerm(FILE *inputFile, FILE *outputFile) {
     TokenType termType = tokenType(line);
     switch (termType) {
         case TokenTypeString:
-            fputs("<stringConstant> ", outputFile);
-            memmove(line, line+1, strlen(line));
-            fputs(line, outputFile);
-            fseek(outputFile, -1, SEEK_CUR);
-            fputs("</stringConstant>\n", outputFile);
+            //TODO: not sure what to do here
             break;
         case TokenTypeInteger:
-            fputterminal(line, "integerConstant", outputFile);
+            //TODO: not sure what to do here
             break;
         case TokenTypeKeyword:
             fputterminal(line, "keyword", outputFile);
@@ -437,20 +402,17 @@ void compileTerm(FILE *inputFile, FILE *outputFile) {
                 
                 Symbol *symbol = symbolWithName(line);
                 if (symbol) {
-                    fputsymbol(outputFile, symbol);
+                    //TODO: not sure what to do
                 } else {
-                    fputterminal(line, "identifier", outputFile);
+                    //TODO: not sure what to do
                 }
                 
                 fgets_nl(line, sizeof(line), inputFile);
-                fputterminal("[", "symbol", outputFile);
                 
                 compileExpression(inputFile, outputFile);
                 
                 fgets_nl(line, sizeof(line), inputFile);
-                if (!strcmp(line, "]")) {
-                    fputterminal("]", "symbol", outputFile);
-                } else {
+                if (strcmp(line, "]")) {
                     printf("Expected ']' to end expression!\n");
                     exit(1);
                 }
@@ -461,9 +423,9 @@ void compileTerm(FILE *inputFile, FILE *outputFile) {
                 
                 Symbol *symbol = symbolWithName(line);
                 if (symbol) {
-                    fputsymbol(outputFile, symbol);
+                    //TODO: not sure what to do
                 } else {
-                    fputterminal(line, "identifier", outputFile);
+                    //TODO: not sure what to do
                 }
                 
                 fsetpos(inputFile, &pos);
@@ -472,20 +434,14 @@ void compileTerm(FILE *inputFile, FILE *outputFile) {
         }
         case TokenTypeSymbol:
             if (!strcmp(line, "(")) {
-                fputterminal("(", "symbol", outputFile);
-                
                 compileExpression(inputFile, outputFile);
                 
                 fgets_nl(line, sizeof(line), inputFile);
-                if (!strcmp(line, ")")) {
-                    fputterminal(")", "symbol", outputFile);
-                } else {
+                if (strcmp(line, ")")) {
                     printf("Expected ')' to end expression!\n");
                     exit(1);
                 }
             } else if (!strcmp(line, "-") || !strcmp(line, "~")) {
-                fputterminal(line, "symbol", outputFile);
-                
                 compileTerm(inputFile, outputFile);
             }
             break;
@@ -494,14 +450,10 @@ void compileTerm(FILE *inputFile, FILE *outputFile) {
             exit(1);
             break;
     }
-    
-    fputs("</term>\n", outputFile);
 }
 
 void compileExpression(FILE *inputFile, FILE *outputFile) {
     char line[256];
-    
-    fputs("<expression>\n", outputFile);
     
     while (1) {
         compileTerm(inputFile, outputFile);
@@ -510,22 +462,16 @@ void compileExpression(FILE *inputFile, FILE *outputFile) {
         fgetpos(inputFile, &pos);
         
         fgets_nl(line, sizeof(line), inputFile);
-        if (!strcmp(line, "+") || !strcmp(line, "-") || !strcmp(line, "*") || !strcmp(line, "/") || !strcmp(line, "&amp;") || !strcmp(line, "|") || !strcmp(line, "&lt;") || !strcmp(line, "&gt;") || !strcmp(line, "=")) {
-            fputterminal(line, "symbol", outputFile);
-        } else {
+        if (strcmp(line, "+") && strcmp(line, "-") && strcmp(line, "*") && strcmp(line, "/") && strcmp(line, "&amp;") && strcmp(line, "|") && strcmp(line, "&lt;") && strcmp(line, "&gt;") && strcmp(line, "=")) {
             fsetpos(inputFile, &pos);
             break;
         }
     }
-    
-    fputs("</expression>\n", outputFile);
 }
 
 void compileStatements(FILE *inputFile, FILE *outputFile) {
     char line[256];
-    
-    fputs("<statements>\n", outputFile);
-    
+
     while (1) {
         fpos_t pos;
         fgetpos(inputFile, &pos);
@@ -534,19 +480,16 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
         if (!strcmp(line, "let") || !strcmp(line, "if") || !strcmp(line, "while") || !strcmp(line, "do") || !strcmp(line, "return")) {
             char *statementType = malloc(strlen(line));
             strcpy(statementType, line);
-            
-            fprintf(outputFile, "<%sStatement>\n", statementType);
-            
-            fputterminal(statementType, "keyword", outputFile);
-            
+
             if (!strcmp(line, "let")) {
                 fgets_nl(line, sizeof(line), inputFile);
                 if (tokenType(line) == TokenTypeIdentifier) {
                     Symbol *symbol = symbolWithName(line);
                     if (symbol) {
-                        fputsymbol(outputFile, symbol);
+                        //TODO: do something with this shit
                     } else {
-                        fputterminal(line, "identifier", outputFile);
+                        printf("Variable '%s' could not be found in the symbol table!\n", line);
+                        exit(1);
                     }
                 } else {
                     printf("Local var name must be of token type 'identifier'!\n");
@@ -555,14 +498,10 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                 
                 fgets_nl(line, sizeof(line), inputFile);
                 if (!strcmp(line, "[")) {
-                    fputterminal("[", "symbol", outputFile);
-                    
                     compileExpression(inputFile, outputFile);
                     
                     fgets_nl(line, sizeof(line), inputFile);
-                    if (!strcmp(line, "]")) {
-                        fputterminal("]", "symbol", outputFile);
-                    } else {
+                    if (strcmp(line, "]")) {
                         printf("Expected ']' to end expression!\n");
                         exit(1);
                     }
@@ -570,9 +509,7 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                     fgets_nl(line, sizeof(line), inputFile);
                 }
                 
-                if (!strcmp(line, "=")) {
-                    fputterminal("=", "symbol", outputFile);
-                } else {
+                if (strcmp(line, "=")) {
                     printf("Expected '=' after let statement declaration!\n");
                     exit(1);
                 }
@@ -580,17 +517,13 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                 compileExpression(inputFile, outputFile);
                 
                 fgets_nl(line, sizeof(line), inputFile);
-                if (!strcmp(line, ";")) {
-                    fputterminal(";", "symbol", outputFile);
-                } else {
+                if (strcmp(line, ";")) {
                     printf("Expected ';' at end of 'let' statement!\n");
                     exit(1);
                 }
             } else if (!strcmp(line, "if") || !strcmp(line, "while")) {
                 fgets_nl(line, sizeof(line), inputFile);
-                if (!strcmp(line, "(")) {
-                    fputterminal("(", "symbol", outputFile);
-                } else {
+                if (strcmp(line, "(")) {
                     printf("Expected '(' at beginning of %s expression!\n", statementType);
                     exit(1);
                 }
@@ -598,17 +531,13 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                 compileExpression(inputFile, outputFile);
                 
                 fgets_nl(line, sizeof(line), inputFile);
-                if (!strcmp(line, ")")) {
-                    fputterminal(")", "symbol", outputFile);
-                } else {
+                if (strcmp(line, ")")) {
                     printf("Expected ')' at end of %s expression!\n", statementType);
                     exit(1);
                 }
                 
                 fgets_nl(line, sizeof(line), inputFile);
-                if (!strcmp(line, "{")) {
-                    fputterminal("{", "symbol", outputFile);
-                } else {
+                if (strcmp(line, "{")) {
                     printf("Expected '{' at beginning of %s statement!\n", statementType);
                     exit(1);
                 }
@@ -616,9 +545,7 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                 compileStatements(inputFile, outputFile);
                 
                 fgets_nl(line, sizeof(line), inputFile);
-                if (!strcmp(line, "}")) {
-                    fputterminal("}", "symbol", outputFile);
-                } else {
+                if (strcmp(line, "}")) {
                     printf("Expected '}' at end of %s statement!\n", statementType);
                     exit(1);
                 }
@@ -629,12 +556,8 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                     
                     fgets_nl(line, sizeof(line), inputFile);
                     if (!strcmp(line, "else")) {
-                        fputterminal("else", "keyword", outputFile);
-                        
                         fgets_nl(line, sizeof(line), inputFile);
-                        if (!strcmp(line, "{")) {
-                            fputterminal("{", "symbol", outputFile);
-                        } else {
+                        if (strcmp(line, "{")) {
                             printf("Expected '{' at beginning of 'else' statement!\n");
                             exit(1);
                         }
@@ -642,9 +565,7 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                         compileStatements(inputFile, outputFile);
                         
                         fgets_nl(line, sizeof(line), inputFile);
-                        if (!strcmp(line, "}")) {
-                            fputterminal("}", "symbol", outputFile);
-                        } else {
+                        if (strcmp(line, "}")) {
                             printf("Expected '}' at end of 'else' statement!\n");
                             exit(1);
                         }
@@ -657,8 +578,6 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                 
                 fgets_nl(line, sizeof(line), inputFile);
                 if (!strcmp(line, ";")) {
-                    fputterminal(";", "symbol", outputFile);
-                } else {
                     printf("Expected ';' at end of 'do' statement!\n");
                     exit(1);
                 }
@@ -675,15 +594,12 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                 }
                 
                 if (!strcmp(line, ";")) {
-                    fputterminal(";", "symbol", outputFile);
-                } else {
                     printf("Expected ';' at end of 'return' statement!\n");
                     exit(1);
                 }
             }
             
-            fprintf(outputFile, "</%sStatement>\n", statementType);
-            free(statementType);
+            free(statementType); //TODO: not sure i need this variable at all anymore..maybe i do
         } else if (!strcmp(line, "}")) {
             fsetpos(inputFile, &pos);
             break;
@@ -692,19 +608,13 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
             exit(1);
         }
     }
-    
-    fputs("</statements>\n", outputFile);
 }
 
 void compileSubroutineBody(FILE *inputFile, FILE *outputFile) {
     char line[256];
     
-    fputs("<subroutineBody>\n", outputFile);
-    
     fgets_nl(line, sizeof(line), inputFile);
-    if (!strcmp(line, "{")) {
-        fputterminal("{", "symbol", outputFile);
-    } else {
+    if (strcmp(line, "{")) {
         printf("Subroutine Body should begin with '{'!\n");
         exit(1);
     }
@@ -717,7 +627,6 @@ void compileSubroutineBody(FILE *inputFile, FILE *outputFile) {
         if (!strcmp(line, "var")) {
             compileVarDeclaration(inputFile, outputFile);
         } else if (!strcmp(line, "}")) {
-            fputterminal("}", "symbol", outputFile);
             break;
         } else if (!strcmp(line, "let") || !strcmp(line, "if") || !strcmp(line, "while") || !strcmp(line, "do") || !strcmp(line, "return")) {
             fsetpos(inputFile, &pos);
@@ -727,8 +636,6 @@ void compileSubroutineBody(FILE *inputFile, FILE *outputFile) {
             exit(1);
         }
     }
-    
-    fputs("</subroutineBody>\n", outputFile);
 }
 
 void compileSubroutineDeclaration(char *subType, char *className, FILE *inputFile, FILE *outputFile) {
@@ -738,48 +645,41 @@ void compileSubroutineDeclaration(char *subType, char *className, FILE *inputFil
     freeSymbolTable(sub_symbols, number_of_sub_symbols);
     sub_symbols = initialize_symbol_table(length_of_sub_symbols, number_of_sub_symbols);
     
-    fputs("<subroutineDec>\n", outputFile);
-    
-    fputterminal(subType, "keyword", outputFile);
-    
     fgets_nl(line, sizeof(line), inputFile);
     TokenType lineType = tokenType(line);
-    if (lineType == TokenTypeIdentifier || !strcmp(line, "int") || !strcmp(line, "char") || !strcmp(line, "boolean") || !strcmp(line, "void")) {
-        fputterminal(line, (lineType == TokenTypeIdentifier) ? "identifier" : "keyword", outputFile);
-    } else {
+    if (lineType != TokenTypeIdentifier && strcmp(line, "int") && strcmp(line, "char") && strcmp(line, "boolean") && strcmp(line, "void")) {
+        //TODO: do i not need to know anything about return type??
         printf("Class subroutine declaration does not have a valid return type!\n");
         exit(1);
     }
     
     fgets_nl(line, sizeof(line), inputFile);
     if (tokenType(line) == TokenTypeIdentifier) {
-        fputterminal(line, "identifier", outputFile);
+        fprintf(outputFile, "function %s.%s ", className, line);
     } else {
         printf("Class subroutine name must have a valid name!\n");
         exit(1);
     }
     
     fgets_nl(line, sizeof(line), inputFile);
-    if (!strcmp(line, "(")) {
-        fputterminal("(", "symbol", outputFile);
-    } else {
+    if (strcmp(line, "(")) {
         printf("Class subroutine missing '('!\n");
         exit(1);
     }
     
-    compileParameterList(inputFile, outputFile);
+    int argumentCount = compileParameterList(inputFile, outputFile);
+    fprintf(outputFile, "%d\n", argumentCount);
     
     fgets_nl(line, sizeof(line), inputFile);
-    if (!strcmp(line, ")")) {
-        fputterminal(")", "symbol", outputFile);
-    } else {
+    if (strcmp(line, ")")) {
         printf("Class subroutine missing ')' at end of parameter list!\n");
         exit(1);
     }
     
-    compileSubroutineBody(inputFile, outputFile);
+    fputs("push argument 0\n pop pointer 0\n", outputFile); //TODO: i think this is standard for every function??
+    //TODO: need to do something different if subType is method
     
-    fputs("</subroutineDec>\n", outputFile);
+    compileSubroutineBody(inputFile, outputFile);
 }
 
 void compileClass(FILE *inputFile, FILE *outputFile) {
