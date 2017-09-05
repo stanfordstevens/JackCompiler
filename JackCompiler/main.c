@@ -47,7 +47,7 @@ Symbol **add_symbol(Symbol **symbolTable, Symbol *symbol) {
     
     *number_of_symbols = *number_of_symbols + 1;
     
-    if (number_of_symbols > length_of_symbols) {
+    if (*number_of_symbols > *length_of_symbols) {
         *length_of_symbols = *length_of_symbols * 2;
         symbolTable = realloc(symbolTable, *length_of_symbols * sizeof(Symbol *));
     }
@@ -58,7 +58,7 @@ Symbol **add_symbol(Symbol **symbolTable, Symbol *symbol) {
     return symbolTable;
 }
 
-Symbol **initialize_symbol_table(size_t *length_of_symbols) {
+Symbol **initialize_symbol_table(size_t *length_of_symbols, size_t *number_of_symbols) {
     int initial_symbol_count = 10;
     Symbol **symbolTable = malloc(initial_symbol_count*sizeof(Symbol));
     
@@ -67,8 +67,27 @@ Symbol **initialize_symbol_table(size_t *length_of_symbols) {
     }
     
     *length_of_symbols = initial_symbol_count;
+    *number_of_symbols = 0;
     
     return symbolTable;
+}
+
+Symbol * _Nullable symbolWithName(char *name) {
+    for (int i = 0; i < *number_of_sub_symbols; i++) {
+        Symbol *symbol = sub_symbols[i];
+        if (!strcmp(name, symbol->name)) {
+            return symbol;
+        }
+    }
+    
+    for (int i = 0; i < *number_of_class_symbols; i++) {
+        Symbol *symbol = class_symbols[i];
+        if (!strcmp(name, symbol->name)) {
+            return symbol;
+        }
+    }
+     
+    return NULL;
 }
 
 #pragma mark String Manipulations
@@ -162,7 +181,7 @@ TokenType tokenType(char *token) {
 
 #pragma mark Compile Functions
 
-void compileVarBody(FILE *inputFile, FILE *outputFile, int tabCount, Symbol *newSymbol) {
+void compileVarBody(FILE *inputFile, FILE *outputFile, int tabCount, Symbol *newSymbol, Symbol **symbolTable) {
     char line[256];
     
     fgets_nl(line, sizeof(line), inputFile);
@@ -182,7 +201,7 @@ void compileVarBody(FILE *inputFile, FILE *outputFile, int tabCount, Symbol *new
         if (tokenType(line) == TokenTypeIdentifier) {
             newSymbol->name = malloc(strlen(line));
             strcpy(newSymbol->name, line);
-            
+            printf("fuck me: %s\n", newSymbol->name);
             fputsymbol(outputFile, newSymbol, tabCount);
         } else {
             printf("Var name must be of token type 'identifier'!\n");
@@ -195,6 +214,17 @@ void compileVarBody(FILE *inputFile, FILE *outputFile, int tabCount, Symbol *new
             
             if (!strcmp(line, ";")) {
                 break;
+            } else {
+                char *kind = newSymbol->kind;
+                char *type = newSymbol->type;
+                
+                newSymbol = malloc(sizeof(Symbol));
+                newSymbol->kind = malloc(strlen(kind));
+                strcpy(newSymbol->kind, kind);
+                newSymbol->type = malloc(strlen(type));
+                strcpy(newSymbol->type, type);
+                
+                add_symbol(symbolTable, newSymbol);
             }
         } else {
             printf("Expected ';' at end of line of var declaration(s)!\n");
@@ -212,12 +242,12 @@ void compileClassVarDeclaration(char *varType, FILE *inputFile, FILE *outputFile
     
     fputterminal(varType, "keyword", innerTabCount, outputFile);
     
-    Symbol newSymbol;
-    newSymbol.kind = malloc(strlen(varType));
-    strcpy(newSymbol.kind, varType);
-    class_symbols = add_symbol(class_symbols, &newSymbol);
+    Symbol *newSymbol = malloc(sizeof(Symbol));
+    newSymbol->kind = malloc(strlen(varType));
+    strcpy(newSymbol->kind, varType);
+    class_symbols = add_symbol(class_symbols, newSymbol);
     
-    compileVarBody(inputFile, outputFile, innerTabCount, &newSymbol);
+    compileVarBody(inputFile, outputFile, innerTabCount, newSymbol, class_symbols);
     
     fputtabs(outputFile, outerTabCount);
     fputs("</classVarDec>\n", outputFile);
@@ -232,11 +262,11 @@ void compileVarDeclaration(FILE *inputFile, FILE *outputFile, int tabCount) {
     
     fputterminal("var", "keyword", innerTabCount, outputFile);
     
-    Symbol newSymbol;
-    newSymbol.kind = "var";
-    sub_symbols = add_symbol(sub_symbols, &newSymbol);
+    Symbol *newSymbol = malloc(sizeof(Symbol));
+    newSymbol->kind = "var";
+    sub_symbols = add_symbol(sub_symbols, newSymbol);
     
-    compileVarBody(inputFile, outputFile, innerTabCount, &newSymbol);
+    compileVarBody(inputFile, outputFile, innerTabCount, newSymbol, sub_symbols);
     
     fputtabs(outputFile, outerTabCount);
     fputs("</varDec>\n", outputFile);
@@ -261,16 +291,16 @@ void compileParameterList(FILE *inputFile, FILE *outputFile, int tabCount) {
             fsetpos(inputFile, &pos);
             break;
         } else {
-            Symbol newSymbol;
-            newSymbol.kind = "argument";
-            sub_symbols = add_symbol(sub_symbols, &newSymbol);
+            Symbol *newSymbol = malloc(sizeof(Symbol));
+            newSymbol->kind = "argument";
+            sub_symbols = add_symbol(sub_symbols, newSymbol);
             
             TokenType lineType = tokenType(line);
             if (lineType == TokenTypeIdentifier || !strcmp(line, "int") || !strcmp(line, "char") || !strcmp(line, "boolean") || !strcmp(line, "void")) {
                 fputterminal(line, (lineType == TokenTypeIdentifier) ? "identifier" : "keyword", innerTabCount, outputFile);
                 
-                newSymbol.type = malloc(strlen(line));
-                strcpy(newSymbol.type, line);
+                newSymbol->type = malloc(strlen(line));
+                strcpy(newSymbol->type, line);
             } else {
                 printf("Subroutine parameter does not have a valid type!\n");
                 exit(1);
@@ -278,10 +308,10 @@ void compileParameterList(FILE *inputFile, FILE *outputFile, int tabCount) {
             
             fgets_nl(line, sizeof(line), inputFile);
             if (tokenType(line) == TokenTypeIdentifier) {
-                newSymbol.name = malloc(strlen(line));
-                strcpy(newSymbol.name, line);
+                newSymbol->name = malloc(strlen(line));
+                strcpy(newSymbol->name, line);
                 
-                fputsymbol(outputFile, &newSymbol, innerTabCount);
+                fputsymbol(outputFile, newSymbol, innerTabCount);
             } else {
                 printf("Class var name must be of token type 'identifier'!\n");
                 exit(1);
@@ -418,7 +448,13 @@ void compileTerm(FILE *inputFile, FILE *outputFile, int tabCount) {
             fsetpos(inputFile, &initialTermPos); //TODO: this is weird and hacky
             if (!strcmp(line, "[")) {
                 fgets_nl(line, sizeof(line), inputFile);
-                fputterminal(line, "identifier", innerTabCount, outputFile);
+                
+                Symbol *symbol = symbolWithName(line);
+                if (symbol) {
+                    fputsymbol(outputFile, symbol, innerTabCount);
+                } else {
+                    fputterminal(line, "identifier", innerTabCount, outputFile);
+                }
                 
                 fgets_nl(line, sizeof(line), inputFile);
                 fputterminal("[", "symbol", innerTabCount, outputFile);
@@ -436,7 +472,13 @@ void compileTerm(FILE *inputFile, FILE *outputFile, int tabCount) {
                 compileSubroutineCall(inputFile, outputFile, innerTabCount);
             } else {
                 fgets_nl(line, sizeof(line), inputFile);
-                fputterminal(line, "identifier", innerTabCount, outputFile);
+                
+                Symbol *symbol = symbolWithName(line);
+                if (symbol) {
+                    fputsymbol(outputFile, symbol, innerTabCount);
+                } else {
+                    fputterminal(line, "identifier", innerTabCount, outputFile);
+                }
                 
                 fsetpos(inputFile, &pos);
             }
@@ -525,7 +567,12 @@ void compileStatements(FILE *inputFile, FILE *outputFile, int tabCount) {
             if (!strcmp(line, "let")) {
                 fgets_nl(line, sizeof(line), inputFile);
                 if (tokenType(line) == TokenTypeIdentifier) {
-                    fputterminal(line, "identifier", newInnerTab, outputFile);
+                    Symbol *symbol = symbolWithName(line);
+                    if (symbol) {
+                        fputsymbol(outputFile, symbol, newInnerTab);
+                    } else {
+                        fputterminal(line, "identifier", newInnerTab, outputFile);
+                    }
                 } else {
                     printf("Local var name must be of token type 'identifier'!\n");
                     exit(1);
@@ -724,7 +771,7 @@ void compileSubroutineDeclaration(char *subType, FILE *inputFile, FILE *outputFi
     if (sub_symbols) {
         free(sub_symbols);
     }
-    sub_symbols = initialize_symbol_table(length_of_sub_symbols);
+    sub_symbols = initialize_symbol_table(length_of_sub_symbols, number_of_sub_symbols);
     
     fputtabs(outputFile, outerTabCount);
     fputs("<subroutineDec>\n", outputFile);
@@ -776,7 +823,7 @@ void compileClass(FILE *inputFile, FILE *outputFile) {
     char line[256];
     int tabCount = 1;
     
-    class_symbols = initialize_symbol_table(length_of_class_symbols);
+    class_symbols = initialize_symbol_table(length_of_class_symbols, number_of_class_symbols);
     
     fgets_nl(line, sizeof(line), inputFile);
     if (!strcmp(line, "class")) {
