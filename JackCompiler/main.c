@@ -292,8 +292,6 @@ void compileExpression(FILE *inputFile, FILE *outputFile);
 
 void compileExpressionList(FILE *inputFile, FILE *outputFile) {
     char line[256];
-
-    fputs("<expressionList>\n", outputFile);
     
     while (1) {
         fpos_t pos;
@@ -301,8 +299,6 @@ void compileExpressionList(FILE *inputFile, FILE *outputFile) {
         
         fgets_nl(line, sizeof(line), inputFile);
         if (!strcmp(line, ")")) {
-            fputs("</expressionList>\n", outputFile);
-            
             fsetpos(inputFile, &pos);
             break;
         } else if (!strcmp(line, ",")) {
@@ -563,7 +559,7 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                 compileSubroutineCall(inputFile, outputFile);
                 
                 fgets_nl(line, sizeof(line), inputFile);
-                if (!strcmp(line, ";")) {
+                if (strcmp(line, ";")) {
                     printf("Expected ';' at end of 'do' statement!\n");
                     exit(1);
                 }
@@ -579,7 +575,7 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                     fgets_nl(line, sizeof(line), inputFile);
                 }
                 
-                if (!strcmp(line, ";")) {
+                if (strcmp(line, ";")) {
                     printf("Expected ';' at end of 'return' statement!\n");
                     exit(1);
                 }
