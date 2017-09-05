@@ -24,6 +24,29 @@ typedef enum {
     TokenTypeIdentifier
 } TokenType;
 
+typedef enum {
+    SymbolTypeStatic,
+    SymbolTypeField,
+    SymbolTypeArg,
+    SymbolTypeVar
+} SymbolKind;
+
+
+typedef struct Symbol {
+    char *name;
+    char *type;
+    SymbolKind kind;
+} Symbol;
+
+size_t *number_of_class_symbols = 0;
+size_t *length_of_class_symbols = 0;
+Symbol *class_symbols;
+
+size_t *number_of_sub_symbols = 0;
+size_t *length_of_sub_symbols = 0;
+Symbol *sub_symbols;
+
+
 int is_jack_file(const char *file) {
     const char *dot = strrchr(file, '.');
     if(!dot || dot == file) { return 0; }
@@ -724,6 +747,38 @@ char* pathWithInputPath(char *inputPath, char *extension) {
     return path;
 }
 
+void initialize_symbol_table(Symbol *symbolTable) {
+    if (symbolTable) {
+        free(symbolTable);
+    }
+    
+    int initial_symbol_count = 10;
+    class_symbols = malloc(initial_symbol_count*sizeof(Symbol));
+    
+    size_t *length_of_symbols = (symbolTable == class_symbols) ? length_of_class_symbols : length_of_sub_symbols;
+    if (length_of_symbols) {
+        free(length_of_symbols);
+    }
+    
+    length_of_symbols = malloc(sizeof(size_t));
+    *length_of_symbols = initial_symbol_count;
+}
+
+void add_symbol(Symbol *symbolTable, Symbol symbol) {
+    size_t *number_of_symbols = (symbolTable == class_symbols) ? number_of_class_symbols : number_of_sub_symbols;
+    size_t *length_of_symbols = (symbolTable == class_symbols) ? length_of_class_symbols : length_of_class_symbols;;
+    
+    *number_of_symbols = *number_of_symbols + 1;
+    
+    if (number_of_symbols > length_of_symbols) {
+        *length_of_symbols = *length_of_symbols * 2;
+        symbolTable = realloc(symbolTable, *length_of_symbols * sizeof(Symbol));
+    }
+    
+    size_t new_index = *number_of_symbols - 1;
+    symbolTable[new_index] = symbol; //TODO: if this works i will shit myself
+}
+
 int main(int argc, const char * argv[]) {
     char *filepath = malloc(200);
     printf("Enter filepath bitch> ");
@@ -839,11 +894,20 @@ int main(int argc, const char * argv[]) {
         char *outputPath = pathWithInputPath(inputPath, "_stanOutput.xml");
         FILE *outputFile = fopen(outputPath, "w");
         
+        //initialize symbol tables
+        initialize_symbol_table(class_symbols);
+        initialize_symbol_table(sub_symbols);
+        
         //parse
         rewind(helperFile);
         compileClass(helperFile, outputFile);
         
         //cleanup
+        free(class_symbols);
+        free(sub_symbols);
+        free(length_of_class_symbols);
+        free(length_of_sub_symbols);
+        
         fclose(outputFile);
         
         fclose(helperFile);
