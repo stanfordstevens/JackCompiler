@@ -28,6 +28,7 @@ typedef struct Symbol {
     char *name;
     char *type;
     char *kind;
+    //TODO: symbol index?? i dont understand how the index works for scope..
 } Symbol;
 
 size_t *number_of_class_symbols = 0;
@@ -38,9 +39,11 @@ size_t *number_of_sub_symbols = 0;
 size_t *length_of_sub_symbols = 0;
 Symbol **sub_symbols;
 
+#pragma mark Symbol Table
+
 void add_symbol(Symbol **symbolTable, Symbol *symbol) {
     size_t *number_of_symbols = (symbolTable == class_symbols) ? number_of_class_symbols : number_of_sub_symbols;
-    size_t *length_of_symbols = (symbolTable == class_symbols) ? length_of_class_symbols : length_of_class_symbols;;
+    size_t *length_of_symbols = (symbolTable == class_symbols) ? length_of_class_symbols : length_of_class_symbols;
     
     *number_of_symbols = *number_of_symbols + 1;
     
@@ -53,15 +56,23 @@ void add_symbol(Symbol **symbolTable, Symbol *symbol) {
     symbolTable[new_index] = symbol; //TODO: if this works i will shit myself
 }
 
-int is_jack_file(const char *file) {
-    const char *dot = strrchr(file, '.');
-    if(!dot || dot == file) { return 0; }
+Symbol **initialize_symbol_table() {
+    int initial_symbol_count = 10;
+    Symbol **symbolTable = malloc(initial_symbol_count*sizeof(Symbol));
     
-    const char *extension = dot + 1;
-    return (!strcmp(extension, "jack")) ? 1 : 0;
+    for (int i = 0; i < initial_symbol_count; i++) {
+        symbolTable[i] = malloc(sizeof(Symbol *));
+    }
+    
+    size_t *length_of_symbols = (symbolTable == class_symbols) ? length_of_class_symbols : length_of_sub_symbols;
+    *length_of_symbols = initial_symbol_count;
+    
+    return symbolTable;
 }
 
-char* trim_whitespace(char *string) {
+#pragma mark String Manipulations
+
+char *trim_whitespace(char *string) {
     while(isspace((unsigned char)*string)) {
         string++;
     }
@@ -78,6 +89,26 @@ char* trim_whitespace(char *string) {
     return string;
 }
 
+char *pathWithInputPath(char *inputPath, char *extension) {
+    char *path = malloc(strlen(inputPath) + 1);
+    strcpy(path, inputPath);
+    char *loc = strrchr(path, '.');
+    *(loc) = 0;
+    strcat(path, extension); //test files already have an xml file, must add extension to distinguish
+    
+    return path;
+}
+
+#pragma mark File Reading
+
+int is_jack_file(const char *file) {
+    const char *dot = strrchr(file, '.');
+    if(!dot || dot == file) { return 0; }
+    
+    const char *extension = dot + 1;
+    return (!strcmp(extension, "jack")) ? 1 : 0;
+}
+
 char *fgets_nl(char *buffer, int size, FILE *file) {
     buffer = fgets(buffer, size, file);
     if (buffer == NULL) { return NULL; }
@@ -89,12 +120,19 @@ char *fgets_nl(char *buffer, int size, FILE *file) {
     return buffer;
 }
 
+#pragma mark File Printing
+
 void fputtabs(FILE *outputFile, int count) {
     while (count > 0) {
         fputc(' ', outputFile);
         fputc(' ', outputFile);
         count--;
     }
+}
+
+void fputsymbol(FILE *outputFile, Symbol *symbol, int tabCount) {
+    fputtabs(outputFile, tabCount);
+    fprintf(outputFile, "name: %s, kind: %s, type: %s\n", symbol->name, symbol->kind, symbol->type);
 }
 
 void fputterminal(char *terminal, char *tag, int tabCount, FILE *outputFile) {
@@ -121,6 +159,8 @@ TokenType tokenType(char *token) {
     }
 }
 
+#pragma mark Compile Functions
+
 void compileVarBody(FILE *inputFile, FILE *outputFile, int tabCount, Symbol *newSymbol) {
     char line[256];
     
@@ -139,10 +179,10 @@ void compileVarBody(FILE *inputFile, FILE *outputFile, int tabCount, Symbol *new
     while (1) {
         fgets_nl(line, sizeof(line), inputFile);
         if (tokenType(line) == TokenTypeIdentifier) {
-            fputterminal(line, "identifier", tabCount, outputFile);
-            
             newSymbol->name = malloc(strlen(line));
             strcpy(newSymbol->name, line);
+            
+            fputsymbol(outputFile, newSymbol, tabCount);
         } else {
             printf("Var name must be of token type 'identifier'!\n");
             exit(1);
@@ -679,6 +719,12 @@ void compileSubroutineDeclaration(char *subType, FILE *inputFile, FILE *outputFi
     int outerTabCount = tabCount;
     int innerTabCount = tabCount + 1;
     
+    //reinitialize sub_symbols because new subroutine is being compiled
+    if (sub_symbols) {
+        free(sub_symbols);
+    }
+    sub_symbols = initialize_symbol_table();
+    
     fputtabs(outputFile, outerTabCount);
     fputs("<subroutineDec>\n", outputFile);
     
@@ -729,6 +775,8 @@ void compileClass(FILE *inputFile, FILE *outputFile) {
     char line[256];
     int tabCount = 1;
     
+    class_symbols = initialize_symbol_table();
+    
     fgets_nl(line, sizeof(line), inputFile);
     if (!strcmp(line, "class")) {
         fputs("<class>\n", outputFile);
@@ -770,36 +818,7 @@ void compileClass(FILE *inputFile, FILE *outputFile) {
     fputs("</class>\n", outputFile);
 }
 
-char* pathWithInputPath(char *inputPath, char *extension) {
-    char *path = malloc(strlen(inputPath) + 1);
-    strcpy(path, inputPath);
-    char *loc = strrchr(path, '.');
-    *(loc) = 0;
-    strcat(path, extension); //test files already have an xml file, must add extension to distinguish
-    
-    return path;
-}
-
-void initialize_symbol_table(Symbol **symbolTable) {
-    if (symbolTable) {
-        free(symbolTable);
-    }
-    
-    int initial_symbol_count = 10;
-    symbolTable = malloc(initial_symbol_count*sizeof(Symbol));
-    
-    for (int i = 0; i < initial_symbol_count; i++) {
-        symbolTable[i] = malloc(sizeof(Symbol *));
-    }
-    
-    size_t *length_of_symbols = (symbolTable == class_symbols) ? length_of_class_symbols : length_of_sub_symbols;
-    if (length_of_symbols) {
-        free(length_of_symbols);
-    }
-    
-    length_of_symbols = malloc(sizeof(size_t));
-    *length_of_symbols = initial_symbol_count;
-}
+#pragma mark Main
 
 int main(int argc, const char * argv[]) {
     char *filepath = malloc(200);
@@ -916,9 +935,16 @@ int main(int argc, const char * argv[]) {
         char *outputPath = pathWithInputPath(inputPath, "_stanOutput.xml");
         FILE *outputFile = fopen(outputPath, "w");
         
-        //initialize symbol tables
-        initialize_symbol_table(class_symbols);
-        initialize_symbol_table(sub_symbols);
+        //initialize symbol table counts
+        length_of_class_symbols = malloc(sizeof(size_t));
+        length_of_sub_symbols = malloc(sizeof(size_t));
+        number_of_class_symbols = malloc(sizeof(size_t));
+        number_of_sub_symbols = malloc(sizeof(size_t));
+        
+        *length_of_class_symbols = 0;
+        *length_of_sub_symbols = 0;
+        *number_of_class_symbols = 0;
+        *number_of_sub_symbols = 0;
         
         //parse
         rewind(helperFile);
