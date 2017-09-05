@@ -41,7 +41,7 @@ Symbol **sub_symbols;
 
 #pragma mark Symbol Table
 
-void add_symbol(Symbol **symbolTable, Symbol *symbol) {
+Symbol **add_symbol(Symbol **symbolTable, Symbol *symbol) {
     size_t *number_of_symbols = (symbolTable == class_symbols) ? number_of_class_symbols : number_of_sub_symbols;
     size_t *length_of_symbols = (symbolTable == class_symbols) ? length_of_class_symbols : length_of_class_symbols;
     
@@ -53,10 +53,12 @@ void add_symbol(Symbol **symbolTable, Symbol *symbol) {
     }
     
     size_t new_index = *number_of_symbols - 1;
-    symbolTable[new_index] = symbol; //TODO: if this works i will shit myself
+    symbolTable[new_index] = symbol;
+    
+    return symbolTable;
 }
 
-Symbol **initialize_symbol_table() {
+Symbol **initialize_symbol_table(size_t *length_of_symbols) {
     int initial_symbol_count = 10;
     Symbol **symbolTable = malloc(initial_symbol_count*sizeof(Symbol));
     
@@ -64,7 +66,6 @@ Symbol **initialize_symbol_table() {
         symbolTable[i] = malloc(sizeof(Symbol *));
     }
     
-    size_t *length_of_symbols = (symbolTable == class_symbols) ? length_of_class_symbols : length_of_sub_symbols;
     *length_of_symbols = initial_symbol_count;
     
     return symbolTable;
@@ -214,7 +215,7 @@ void compileClassVarDeclaration(char *varType, FILE *inputFile, FILE *outputFile
     Symbol newSymbol;
     newSymbol.kind = malloc(strlen(varType));
     strcpy(newSymbol.kind, varType);
-    add_symbol(class_symbols, &newSymbol);
+    class_symbols = add_symbol(class_symbols, &newSymbol);
     
     compileVarBody(inputFile, outputFile, innerTabCount, &newSymbol);
     
@@ -233,7 +234,7 @@ void compileVarDeclaration(FILE *inputFile, FILE *outputFile, int tabCount) {
     
     Symbol newSymbol;
     newSymbol.kind = "var";
-    add_symbol(sub_symbols, &newSymbol);
+    sub_symbols = add_symbol(sub_symbols, &newSymbol);
     
     compileVarBody(inputFile, outputFile, innerTabCount, &newSymbol);
     
@@ -262,7 +263,7 @@ void compileParameterList(FILE *inputFile, FILE *outputFile, int tabCount) {
         } else {
             Symbol newSymbol;
             newSymbol.kind = "argument";
-            add_symbol(sub_symbols, &newSymbol);
+            sub_symbols = add_symbol(sub_symbols, &newSymbol);
             
             TokenType lineType = tokenType(line);
             if (lineType == TokenTypeIdentifier || !strcmp(line, "int") || !strcmp(line, "char") || !strcmp(line, "boolean") || !strcmp(line, "void")) {
@@ -277,10 +278,10 @@ void compileParameterList(FILE *inputFile, FILE *outputFile, int tabCount) {
             
             fgets_nl(line, sizeof(line), inputFile);
             if (tokenType(line) == TokenTypeIdentifier) {
-                fputterminal(line, "identifier", innerTabCount, outputFile);
-                
                 newSymbol.name = malloc(strlen(line));
                 strcpy(newSymbol.name, line);
+                
+                fputsymbol(outputFile, &newSymbol, innerTabCount);
             } else {
                 printf("Class var name must be of token type 'identifier'!\n");
                 exit(1);
@@ -723,7 +724,7 @@ void compileSubroutineDeclaration(char *subType, FILE *inputFile, FILE *outputFi
     if (sub_symbols) {
         free(sub_symbols);
     }
-    sub_symbols = initialize_symbol_table();
+    sub_symbols = initialize_symbol_table(length_of_sub_symbols);
     
     fputtabs(outputFile, outerTabCount);
     fputs("<subroutineDec>\n", outputFile);
@@ -775,7 +776,7 @@ void compileClass(FILE *inputFile, FILE *outputFile) {
     char line[256];
     int tabCount = 1;
     
-    class_symbols = initialize_symbol_table();
+    class_symbols = initialize_symbol_table(length_of_class_symbols);
     
     fgets_nl(line, sizeof(line), inputFile);
     if (!strcmp(line, "class")) {
@@ -951,10 +952,12 @@ int main(int argc, const char * argv[]) {
         compileClass(helperFile, outputFile);
         
         //cleanup
-        free(class_symbols);
-        free(sub_symbols);
+        //TODO: why does program crash when i free the symbol tables??
+        
         free(length_of_class_symbols);
         free(length_of_sub_symbols);
+        free(number_of_class_symbols);
+        free(number_of_sub_symbols);
         
         fclose(outputFile);
         
