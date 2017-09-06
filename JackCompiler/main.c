@@ -28,7 +28,7 @@ typedef struct Symbol {
     char *name;
     char *type;
     char *kind;
-    //TODO: symbol index?? i dont understand how the index works for scope..
+    int scope;
 } Symbol;
 
 size_t *number_of_class_symbols;
@@ -62,6 +62,15 @@ Symbol **add_symbol(Symbol **symbolTable, Symbol *symbol) {
     size_t *number_of_symbols = (symbolTable == class_symbols) ? number_of_class_symbols : number_of_sub_symbols;
     size_t *length_of_symbols = (symbolTable == class_symbols) ? length_of_class_symbols : length_of_class_symbols;
     
+    int scope = 0;
+    for (int i = (int)*number_of_symbols - 1; i >= 0; i--) {
+        Symbol *existingSymbol = symbolTable[i];
+        if (strcmp(existingSymbol->kind, symbol->kind)) {
+            scope = existingSymbol->scope + 1;
+        }
+    }
+    symbol->scope = scope;
+    
     *number_of_symbols = *number_of_symbols + 1;
     
     if (*number_of_symbols > *length_of_symbols) {
@@ -69,8 +78,7 @@ Symbol **add_symbol(Symbol **symbolTable, Symbol *symbol) {
         symbolTable = realloc(symbolTable, *length_of_symbols * sizeof(Symbol *));
     }
     
-    size_t new_index = *number_of_symbols - 1;
-    symbolTable[new_index] = symbol;
+    symbolTable[*number_of_symbols - 1] = symbol;
     
     return symbolTable;
 }
@@ -509,12 +517,11 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
             strcpy(statementType, line);
 
             if (!strcmp(line, "let")) {
+                Symbol *symbol = NULL;
                 fgets_nl(line, sizeof(line), inputFile);
                 if (tokenType(line) == TokenTypeIdentifier) {
-                    Symbol *symbol = symbolWithName(line);
-                    if (symbol) {
-                        //TODO: do something with this shit
-                    } else {
+                    symbol = symbolWithName(line);
+                    if (!symbol) {
                         printf("Variable '%s' could not be found in the symbol table!\n", line);
                         exit(1);
                     }
@@ -522,6 +529,9 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                     printf("Local var name must be of token type 'identifier'!\n");
                     exit(1);
                 }
+                
+                char *kind = !strcmp(symbol->kind, "var") ? "local" : !strcmp(symbol->kind, "field") ? "this" : symbol->kind;
+                fprintf(outputFile, "push %s %d\n", kind, symbol->scope);
                 
                 fgets_nl(line, sizeof(line), inputFile);
                 if (!strcmp(line, "[")) {
@@ -548,6 +558,8 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                     printf("Expected ';' at end of 'let' statement!\n");
                     exit(1);
                 }
+                
+                fprintf(outputFile, "pop %s %d\n", kind, symbol->scope);
             } else if (!strcmp(line, "if")) {
                 fgets_nl(line, sizeof(line), inputFile);
                 if (strcmp(line, "(")) {
