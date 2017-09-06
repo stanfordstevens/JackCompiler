@@ -40,6 +40,7 @@ size_t *length_of_sub_symbols;
 Symbol **sub_symbols;
 
 char *currentClass;
+int labelNumber;
 
 #pragma mark Symbol Table
 
@@ -133,6 +134,11 @@ char *pathWithInputPath(char *inputPath, char *extension) {
     strcat(path, extension); //test files already have an xml file, must add extension to distinguish
     
     return path;
+}
+
+void uniqueLabel(char *label) {
+    sprintf(label, "LABEL%d", labelNumber);
+    labelNumber++;
 }
 
 #pragma mark File Reading
@@ -542,7 +548,7 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                     printf("Expected ';' at end of 'let' statement!\n");
                     exit(1);
                 }
-            } else if (!strcmp(line, "if") || !strcmp(line, "while")) {
+            } else if (!strcmp(line, "if")) {
                 fgets_nl(line, sizeof(line), inputFile);
                 if (strcmp(line, "(")) {
                     printf("Expected '(' at beginning of %s expression!\n", statementType);
@@ -556,6 +562,12 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                     printf("Expected ')' at end of %s expression!\n", statementType);
                     exit(1);
                 }
+                
+                fputs("not\n", outputFile);
+                
+                char label_1[9];
+                uniqueLabel(label_1);
+                fprintf(outputFile, "if-goto %s\n", label_1);
                 
                 fgets_nl(line, sizeof(line), inputFile);
                 if (strcmp(line, "{")) {
@@ -571,29 +583,75 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                     exit(1);
                 }
                 
-                if (!strcmp(statementType, "if")) {
-                    fpos_t pos;
-                    fgetpos(inputFile, &pos);
+                char label_2[9];
+                uniqueLabel(label_2);
+                fprintf(outputFile, "goto %s\n", label_2);
+                fprintf(outputFile, "label %s\n", label_1);
+                
+                fpos_t pos;
+                fgetpos(inputFile, &pos);
+                
+                fgets_nl(line, sizeof(line), inputFile);
+                if (!strcmp(line, "else")) {
+                    fgets_nl(line, sizeof(line), inputFile);
+                    if (strcmp(line, "{")) {
+                        printf("Expected '{' at beginning of 'else' statement!\n");
+                        exit(1);
+                    }
+                    
+                    compileStatements(inputFile, outputFile);
                     
                     fgets_nl(line, sizeof(line), inputFile);
-                    if (!strcmp(line, "else")) {
-                        fgets_nl(line, sizeof(line), inputFile);
-                        if (strcmp(line, "{")) {
-                            printf("Expected '{' at beginning of 'else' statement!\n");
-                            exit(1);
-                        }
-                        
-                        compileStatements(inputFile, outputFile);
-                        
-                        fgets_nl(line, sizeof(line), inputFile);
-                        if (strcmp(line, "}")) {
-                            printf("Expected '}' at end of 'else' statement!\n");
-                            exit(1);
-                        }
-                    } else {
-                        fsetpos(inputFile, &pos);
+                    if (strcmp(line, "}")) {
+                        printf("Expected '}' at end of 'else' statement!\n");
+                        exit(1);
                     }
+                } else {
+                    fsetpos(inputFile, &pos);
                 }
+                
+                fprintf(outputFile, "label %s\n", label_2);
+            } else if (!strcmp(line, "while")) {
+                char label_1[9];
+                uniqueLabel(label_1);
+                fprintf(outputFile, "label %s\n", label_1);
+                
+                fgets_nl(line, sizeof(line), inputFile);
+                if (strcmp(line, "(")) {
+                    printf("Expected '(' at beginning of %s expression!\n", statementType);
+                    exit(1);
+                }
+                
+                compileExpression(inputFile, outputFile);
+                
+                fgets_nl(line, sizeof(line), inputFile);
+                if (strcmp(line, ")")) {
+                    printf("Expected ')' at end of %s expression!\n", statementType);
+                    exit(1);
+                }
+                
+                fputs("not\n", outputFile);
+                
+                char label_2[9];
+                uniqueLabel(label_2);
+                fprintf(outputFile, "if-goto %s\n", label_2);
+                
+                fgets_nl(line, sizeof(line), inputFile);
+                if (strcmp(line, "{")) {
+                    printf("Expected '{' at beginning of %s statement!\n", statementType);
+                    exit(1);
+                }
+                
+                compileStatements(inputFile, outputFile);
+                
+                fgets_nl(line, sizeof(line), inputFile);
+                if (strcmp(line, "}")) {
+                    printf("Expected '}' at end of %s statement!\n", statementType);
+                    exit(1);
+                }
+                
+                fprintf(outputFile, "goto %s\n", label_1);
+                fprintf(outputFile, "label %s", label_2);
             } else if (!strcmp(line, "do")) {
                 compileSubroutineCall(inputFile, outputFile);
                 
@@ -798,6 +856,7 @@ int main(int argc, const char * argv[]) {
         return 1;
     }
 
+    labelNumber = 1;
     for (int i = 0; i < number_of_files; i++) {
         //set up input file for reading
         char *inputPath = files[i];
