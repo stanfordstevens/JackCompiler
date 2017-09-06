@@ -39,6 +39,8 @@ size_t *number_of_sub_symbols;
 size_t *length_of_sub_symbols;
 Symbol **sub_symbols;
 
+char *currentClass;
+
 #pragma mark Symbol Table
 
 void freeSymbolTable(Symbol **symbolTable, size_t *numberOfSymbols) {
@@ -290,9 +292,10 @@ int compileParameterList(FILE *inputFile, FILE *outputFile) {
 
 void compileExpression(FILE *inputFile, FILE *outputFile);
 
-void compileExpressionList(FILE *inputFile, FILE *outputFile) {
+int compileExpressionList(FILE *inputFile, FILE *outputFile) {
     char line[256];
     
+    int count = 0;
     while (1) {
         fpos_t pos;
         fgetpos(inputFile, &pos);
@@ -306,8 +309,11 @@ void compileExpressionList(FILE *inputFile, FILE *outputFile) {
         } else {
             fsetpos(inputFile, &pos);
             compileExpression(inputFile, outputFile);
+            count++;
         }
     }
+    
+    return count;
 }
 
 void compileSubroutineCall(FILE *inputFile, FILE *outputFile) {
@@ -319,15 +325,20 @@ void compileSubroutineCall(FILE *inputFile, FILE *outputFile) {
         exit(1);
     }
     
+    char *subFirst = malloc(strlen(line));
+    strcpy(subFirst, line);
+    
     fgets_nl(line, sizeof(line), inputFile);
     if (!strcmp(line, "(")) {
-        compileExpressionList(inputFile, outputFile);
+        int expressionCount = compileExpressionList(inputFile, outputFile);
 
         fgets_nl(line, sizeof(line), inputFile);
         if (strcmp(line, ")")) {
             printf("Expected ')' to end expression list!\n");
             exit(1);
         }
+        
+        fprintf(outputFile, "call %s.%s %d\n", currentClass, subFirst, expressionCount);
     } else if (!strcmp(line, ".")) {
         fgets_nl(line, sizeof(line), inputFile);
         if (tokenType(line) != TokenTypeIdentifier) {
@@ -335,15 +346,20 @@ void compileSubroutineCall(FILE *inputFile, FILE *outputFile) {
             exit(1);
         }
         
+        char *subName = malloc(strlen(line));
+        strcpy(subName, line);
+        
         fgets_nl(line, sizeof(line), inputFile);
         if (!strcmp(line, "(")) {
-            compileExpressionList(inputFile, outputFile);
+            int expressionCount = compileExpressionList(inputFile, outputFile);
             
             fgets_nl(line, sizeof(line), inputFile);
             if (strcmp(line, ")")) {
                 printf("Expected ')' to end expression list!\n");
                 exit(1);
             }
+            
+            fprintf(outputFile, "call %s.%s %d\n", subFirst, subName, expressionCount);
         } else {
             printf("Invalid subroutine name!\n");
             exit(1);
@@ -367,7 +383,7 @@ void compileTerm(FILE *inputFile, FILE *outputFile) {
             //TODO: not sure what to do here
             break;
         case TokenTypeInteger:
-            //TODO: not sure what to do here
+            fprintf(outputFile, "push constant %s\n", line);
             break;
         case TokenTypeKeyword:
             //TODO: not sure what to do here
@@ -437,14 +453,37 @@ void compileTerm(FILE *inputFile, FILE *outputFile) {
 void compileExpression(FILE *inputFile, FILE *outputFile) {
     char line[256];
     
+    char *operation = NULL;
     while (1) {
         compileTerm(inputFile, outputFile);
+        
+        if (operation) {
+            fprintf(outputFile, "%s\n", operation);
+        }
         
         fpos_t pos;
         fgetpos(inputFile, &pos);
         
         fgets_nl(line, sizeof(line), inputFile);
-        if (strcmp(line, "+") && strcmp(line, "-") && strcmp(line, "*") && strcmp(line, "/") && strcmp(line, "&amp;") && strcmp(line, "|") && strcmp(line, "&lt;") && strcmp(line, "&gt;") && strcmp(line, "=")) {
+        if (!strcmp(line, "+")) {
+            operation = "add";
+        } else if (!strcmp(line, "-")) {
+            operation = "sub";
+        } else if (!strcmp(line, "*")) {
+            operation = "call Math.multiply 2";
+        } else if (!strcmp(line, "/")) {
+            operation = "call Math.divide 2";
+        } else if (!strcmp(line, "&amp;")) {
+            operation = "and";
+        } else if (!strcmp(line, "|")) {
+            operation = "or";
+        } else if (!strcmp(line, "&lt;")) {
+            operation = "lt";
+        } else if (!strcmp(line, "&gt;")) {
+            operation = "gt";
+        } else if (!strcmp(line, "=")) {
+            operation = "eq";
+        } else {
             fsetpos(inputFile, &pos);
             break;
         }
@@ -579,6 +618,8 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                     printf("Expected ';' at end of 'return' statement!\n");
                     exit(1);
                 }
+                
+                fputs("return\n", outputFile); //TODO: do i need the 'push 0'??
             }
             
             free(statementType); //TODO: not sure i need this variable at all anymore..maybe i do
@@ -620,7 +661,7 @@ void compileSubroutineBody(FILE *inputFile, FILE *outputFile) {
     }
 }
 
-void compileSubroutineDeclaration(char *subType, char *className, FILE *inputFile, FILE *outputFile) {
+void compileSubroutineDeclaration(char *subType, FILE *inputFile, FILE *outputFile) {
     char line[256];
 
     //reinitialize sub_symbols because new subroutine is being compiled
@@ -637,7 +678,7 @@ void compileSubroutineDeclaration(char *subType, char *className, FILE *inputFil
     
     fgets_nl(line, sizeof(line), inputFile);
     if (tokenType(line) == TokenTypeIdentifier) {
-        fprintf(outputFile, "function %s.%s ", className, line);
+        fprintf(outputFile, "function %s.%s ", currentClass, line);
     } else {
         printf("Class subroutine name must have a valid name!\n");
         exit(1);
@@ -652,14 +693,15 @@ void compileSubroutineDeclaration(char *subType, char *className, FILE *inputFil
     int argumentCount = compileParameterList(inputFile, outputFile);
     fprintf(outputFile, "%d\n", argumentCount);
     
+    if (!strcmp(subType, "method")) {
+        fputs("push argument 0\npop pointer 0\n", outputFile);
+    }
+    
     fgets_nl(line, sizeof(line), inputFile);
     if (strcmp(line, ")")) {
         printf("Class subroutine missing ')' at end of parameter list!\n");
         exit(1);
     }
-    
-    fputs("push argument 0\n pop pointer 0\n", outputFile); //TODO: i think this is standard for every function??
-    //TODO: need to do something different if subType is method
     
     compileSubroutineBody(inputFile, outputFile);
 }
@@ -676,9 +718,9 @@ void compileClass(FILE *inputFile, FILE *outputFile) {
     }
     
     fgets_nl(line, sizeof(line), inputFile);
-    char *className = malloc(strlen(line));
+    currentClass = malloc(strlen(line));
     if (tokenType(line) == TokenTypeIdentifier) {
-        strcpy(className, line);
+        strcpy(currentClass, line);
     } else {
         printf("Class declaration has no class name!\n");
         exit(1);
@@ -694,7 +736,7 @@ void compileClass(FILE *inputFile, FILE *outputFile) {
         if (!strcmp(line, "field") || !strcmp(line, "static")) {
             compileClassVarDeclaration(line, inputFile, outputFile);
         } else if (!strcmp(line, "constructor") || !strcmp(line, "function") || !strcmp(line, "method")) {
-            compileSubroutineDeclaration(line, className, inputFile, outputFile);
+            compileSubroutineDeclaration(line, inputFile, outputFile);
         } else if (!strcmp(line, "}")) {
             //do nothing
         } else {
@@ -847,6 +889,9 @@ int main(int argc, const char * argv[]) {
         free(length_of_sub_symbols);
         free(number_of_class_symbols);
         free(number_of_sub_symbols);
+        
+        free(currentClass);
+        currentClass = NULL;
         
         fclose(outputFile);
         
