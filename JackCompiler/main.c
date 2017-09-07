@@ -423,7 +423,7 @@ void compileTerm(FILE *inputFile, FILE *outputFile) {
             } else if (!strcmp("false", line)) {
                 fputs("push constant 0\n", outputFile);
             } else if (!strcmp("this", line)) {
-                fputs("push pointer 0\n", outputFile); //TODO: not sure what to do here
+                fputs("push pointer 0\n", outputFile);
             } else {
                 printf("Unrecognized keyword used as term: %s!\n", line);
                 exit(1);
@@ -722,7 +722,7 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                 fputs("return\n", outputFile);
             }
             
-            free(statementType); //TODO: not sure i need this variable at all anymore..maybe i do
+            free(statementType);
         } else if (!strcmp(line, "}")) {
             fsetpos(inputFile, &pos);
             break;
@@ -761,8 +761,8 @@ void compileSubroutineBody(FILE *inputFile, FILE *outputFile, char *subType) {
     
     if (!strcmp(subType, "method")) {
         fputs("push argument 0\npop pointer 0\n", outputFile);
-    } else if (!strcmp(subType, "constructor")) { //TODO: not sure what to do here
-        fprintf(outputFile, "push constant %zu\ncall Memory.alloc 1\npop pointer 0\n", *number_of_class_symbols); //TODO: change this size, but to what??
+    } else if (!strcmp(subType, "constructor")) {
+        fprintf(outputFile, "push constant %zu\ncall Memory.alloc 1\npop pointer 0\n", *number_of_class_symbols);
     }
 
     //compile statements
