@@ -412,7 +412,13 @@ void compileTerm(FILE *inputFile, FILE *outputFile) {
     TokenType termType = tokenType(line);
     switch (termType) {
         case TokenTypeString:
-            //TODO: not sure what to do here
+            fprintf(outputFile, "push constant %lu\ncall String.new 1\n", strlen(line)-2); //ignore '"'
+            for (int i = 0; i < strlen(line) - 1; i++) {
+                char c = line[i];
+                if (c != '"') {
+                    fprintf(outputFile, "push constant %d\ncall String.appendChar 2\n", c);
+                }
+            }
             break;
         case TokenTypeInteger:
             fprintf(outputFile, "push constant %s\n", line);
@@ -431,30 +437,21 @@ void compileTerm(FILE *inputFile, FILE *outputFile) {
             break;
         case TokenTypeIdentifier:
         {
-            fpos_t pos;
-            fgetpos(inputFile, &pos);
-            
             fgets_nl(line, sizeof(line), inputFile);
             fsetpos(inputFile, &initialTermPos); //TODO: this is weird and hacky
             if (!strcmp(line, "[")) {
                 fgets_nl(line, sizeof(line), inputFile);
-                
-                Symbol *symbol = symbolWithName(line);
-                if (symbol) {
-                    //TODO: not sure what to do
-                } else {
-                    //TODO: not sure what to do
-                }
-                
                 fgets_nl(line, sizeof(line), inputFile);
                 
                 compileExpression(inputFile, outputFile);
                 
                 fgets_nl(line, sizeof(line), inputFile);
                 if (strcmp(line, "]")) {
-                    printf("Expected ']' to end expression!\n");
+                    printf("Expected ']' to end expression, not '%s'!\n", line);
                     exit(1);
                 }
+                
+                fputs("add\n", outputFile);
             } else if (!strcmp(line, "(") || !strcmp(line, ".")) {
                 compileSubroutineCall(inputFile, outputFile);
             } else {
@@ -467,8 +464,6 @@ void compileTerm(FILE *inputFile, FILE *outputFile) {
                 }
                 
                 writeSymbol(outputFile, "push", symbol);
-                
-                fsetpos(inputFile, &pos);
             }
             break;
         }
@@ -583,7 +578,7 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                 
                 fgets_nl(line, sizeof(line), inputFile);
                 if (strcmp(line, ";")) {
-                    printf("Expected ';' at end of 'let' statement!\n");
+                    printf("Expected ';' at end of 'let' statement, not '%s'!\n", line);
                     exit(1);
                 }
                 
