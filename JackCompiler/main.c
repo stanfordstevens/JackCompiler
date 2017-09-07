@@ -348,7 +348,8 @@ void compileSubroutineCall(FILE *inputFile, FILE *outputFile) {
     
     fgets_nl(line, sizeof(line), inputFile);
     if (!strcmp(line, "(")) {
-        int expressionCount = compileExpressionList(inputFile, outputFile);
+        fputs("push pointer 0\n", outputFile);
+        int expressionCount = compileExpressionList(inputFile, outputFile) + 1;
 
         fgets_nl(line, sizeof(line), inputFile);
         if (strcmp(line, ")")) {
@@ -357,7 +358,16 @@ void compileSubroutineCall(FILE *inputFile, FILE *outputFile) {
         }
         
         fprintf(outputFile, "call %s.%s %d\n", currentClass, subFirst, expressionCount);
+        fputs("pop temp 0\n", outputFile);
     } else if (!strcmp(line, ".")) {
+        Symbol *symbol = symbolWithName(subFirst);
+        int expressionCount = 0;
+        if (symbol) {
+            subFirst = symbol->type;
+            expressionCount = 1;
+            writeSymbol(outputFile, "push", symbol);
+        }
+        
         fgets_nl(line, sizeof(line), inputFile);
         if (tokenType(line) != TokenTypeIdentifier) {
             printf("Invalid subroutine name!\n");
@@ -369,7 +379,7 @@ void compileSubroutineCall(FILE *inputFile, FILE *outputFile) {
         
         fgets_nl(line, sizeof(line), inputFile);
         if (!strcmp(line, "(")) {
-            int expressionCount = compileExpressionList(inputFile, outputFile);
+            expressionCount += compileExpressionList(inputFile, outputFile);
             
             fgets_nl(line, sizeof(line), inputFile);
             if (strcmp(line, ")")) {
@@ -381,6 +391,10 @@ void compileSubroutineCall(FILE *inputFile, FILE *outputFile) {
         } else {
             printf("Invalid subroutine name!\n");
             exit(1);
+        }
+        
+        if (symbol) {
+            fputs("pop temp 0\n", outputFile);
         }
     } else {
         printf("Expected '(' or '.' after subroutine call!\n");
@@ -406,8 +420,13 @@ void compileTerm(FILE *inputFile, FILE *outputFile) {
         case TokenTypeKeyword:
             if (!strcmp("true", line)) {
                 fputs("push constant 1\nneg\n", outputFile);
-            } else {
+            } else if (!strcmp("false", line)) {
                 fputs("push constant 0\n", outputFile);
+            } else if (!strcmp("this", line)) {
+                fputs("push pointer 0\n", outputFile); //TODO: not sure what to do here
+            } else {
+                printf("Unrecognized keyword used as term: %s!\n", line);
+                exit(1);
             }
             break;
         case TokenTypeIdentifier:
@@ -541,8 +560,6 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                     printf("Local var name must be of token type 'identifier'!\n");
                     exit(1);
                 }
-                
-                writeSymbol(outputFile, "push", symbol);
                 
                 fgets_nl(line, sizeof(line), inputFile);
                 if (!strcmp(line, "[")) {
@@ -693,6 +710,8 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                     compileExpression(inputFile, outputFile);
                     
                     fgets_nl(line, sizeof(line), inputFile);
+                } else {
+                    fputs("push constant 0\n", outputFile);
                 }
                 
                 if (strcmp(line, ";")) {
@@ -700,7 +719,7 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                     exit(1);
                 }
                 
-                fputs("return\n", outputFile); //TODO: do i need the 'push 0'??
+                fputs("return\n", outputFile);
             }
             
             free(statementType); //TODO: not sure i need this variable at all anymore..maybe i do
@@ -742,6 +761,8 @@ void compileSubroutineBody(FILE *inputFile, FILE *outputFile, char *subType) {
     
     if (!strcmp(subType, "method")) {
         fputs("push argument 0\npop pointer 0\n", outputFile);
+    } else if (!strcmp(subType, "constructor")) { //TODO: not sure what to do here
+        fprintf(outputFile, "push constant %zu\ncall Memory.alloc 1\npop pointer 0\n", *number_of_class_symbols); //TODO: change this size, but to what??
     }
 
     //compile statements
@@ -788,6 +809,21 @@ void compileSubroutineDeclaration(char *subType, FILE *inputFile, FILE *outputFi
     if (strcmp(line, "(")) {
         printf("Class subroutine missing '('!\n");
         exit(1);
+    }
+    
+    if (!strcmp(subType, "method")) {
+        Symbol *newSymbol = malloc(sizeof(Symbol));
+        
+        newSymbol->name = malloc(strlen("this"));
+        strcpy(newSymbol->name, "this");
+        
+        newSymbol->type = malloc(strlen(currentClass));
+        strcpy(newSymbol->type, currentClass);
+        
+        newSymbol->kind = malloc(strlen("argument"));
+        strcpy(newSymbol->kind, "argument");
+        
+        add_symbol(sub_symbols, newSymbol);
     }
     
     compileParameterList(inputFile, outputFile);
