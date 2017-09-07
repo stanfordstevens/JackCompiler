@@ -334,7 +334,7 @@ int compileExpressionList(FILE *inputFile, FILE *outputFile) {
     return count;
 }
 
-void compileSubroutineCall(FILE *inputFile, FILE *outputFile) {
+void compileSubroutineCall(FILE *inputFile, FILE *outputFile, int hasReturn) {
     char line[256];
     
     fgets_nl(line, sizeof(line), inputFile);
@@ -358,7 +358,6 @@ void compileSubroutineCall(FILE *inputFile, FILE *outputFile) {
         }
         
         fprintf(outputFile, "call %s.%s %d\n", currentClass, subFirst, expressionCount);
-        fputs("pop temp 0\n", outputFile);
     } else if (!strcmp(line, ".")) {
         Symbol *symbol = symbolWithName(subFirst);
         int expressionCount = 0;
@@ -392,13 +391,13 @@ void compileSubroutineCall(FILE *inputFile, FILE *outputFile) {
             printf("Invalid subroutine name!\n");
             exit(1);
         }
-        
-        if (symbol) {
-            fputs("pop temp 0\n", outputFile);
-        }
     } else {
         printf("Expected '(' or '.' after subroutine call!\n");
         exit(1);
+    }
+    
+    if (!hasReturn) {
+        fputs("pop temp 0\n", outputFile);
     }
 }
 
@@ -453,7 +452,7 @@ void compileTerm(FILE *inputFile, FILE *outputFile) {
                 
                 fputs("add\n", outputFile);
             } else if (!strcmp(line, "(") || !strcmp(line, ".")) {
-                compileSubroutineCall(inputFile, outputFile);
+                compileSubroutineCall(inputFile, outputFile, 1);
             } else {
                 fgets_nl(line, sizeof(line), inputFile);
                 
@@ -688,7 +687,7 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                 fprintf(outputFile, "goto %s\n", label_1);
                 fprintf(outputFile, "label %s\n", label_2);
             } else if (!strcmp(line, "do")) {
-                compileSubroutineCall(inputFile, outputFile);
+                compileSubroutineCall(inputFile, outputFile, 0);
                 
                 fgets_nl(line, sizeof(line), inputFile);
                 if (strcmp(line, ";")) {
