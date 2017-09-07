@@ -65,8 +65,9 @@ Symbol **add_symbol(Symbol **symbolTable, Symbol *symbol) {
     int scope = 0;
     for (int i = (int)*number_of_symbols - 1; i >= 0; i--) {
         Symbol *existingSymbol = symbolTable[i];
-        if (strcmp(existingSymbol->kind, symbol->kind)) {
+        if (!strcmp(existingSymbol->kind, symbol->kind)) {
             scope = existingSymbol->scope + 1;
+            break;
         }
     }
     symbol->scope = scope;
@@ -172,6 +173,11 @@ char *fgets_nl(char *buffer, int size, FILE *file) {
 
 #pragma mark File Printing
 
+void writeSymbol(FILE *outputFile, char *action, Symbol *symbol) {
+    char *kind = !strcmp(symbol->kind, "var") ? "local" : !strcmp(symbol->kind, "field") ? "this" : symbol->kind;
+    fprintf(outputFile, "%s %s %d\n", action, kind, symbol->scope);
+}
+
 TokenType tokenType(char *token) {
     if (isSymbol(token[0])) {
         return TokenTypeSymbol;
@@ -193,7 +199,7 @@ TokenType tokenType(char *token) {
 
 #pragma mark Compile Functions
 
-void compileVarBody(FILE *inputFile, FILE *outputFile, Symbol *newSymbol, Symbol **symbolTable) {
+int compileVarBody(FILE *inputFile, FILE *outputFile, Symbol *newSymbol, Symbol **symbolTable) {
     char line[256];
     
     fgets_nl(line, sizeof(line), inputFile);
@@ -206,6 +212,7 @@ void compileVarBody(FILE *inputFile, FILE *outputFile, Symbol *newSymbol, Symbol
         exit(1);
     }
     
+    int variableCount = 0;
     while (1) {
         fgets_nl(line, sizeof(line), inputFile);
         if (tokenType(line) == TokenTypeIdentifier) {
@@ -216,27 +223,29 @@ void compileVarBody(FILE *inputFile, FILE *outputFile, Symbol *newSymbol, Symbol
             exit(1);
         }
         
+        variableCount++;
+        
         fgets_nl(line, sizeof(line), inputFile);
-        if (!strcmp(line, ";") || !strcmp(line, ",")) {
-            if (!strcmp(line, ";")) {
-                break;
-            } else {
-                char *kind = newSymbol->kind;
-                char *type = newSymbol->type;
-                
-                newSymbol = malloc(sizeof(Symbol));
-                newSymbol->kind = malloc(strlen(kind));
-                strcpy(newSymbol->kind, kind);
-                newSymbol->type = malloc(strlen(type));
-                strcpy(newSymbol->type, type);
-                
-                add_symbol(symbolTable, newSymbol);
-            }
+        if (!strcmp(line, ";")) {
+            break;
+        } else if (!strcmp(line, ",")) {
+            char *kind = newSymbol->kind;
+            char *type = newSymbol->type;
+            
+            newSymbol = malloc(sizeof(Symbol));
+            newSymbol->kind = malloc(strlen(kind));
+            strcpy(newSymbol->kind, kind);
+            newSymbol->type = malloc(strlen(type));
+            strcpy(newSymbol->type, type);
+            
+            add_symbol(symbolTable, newSymbol);
         } else {
             printf("Expected ';' at end of line of var declaration(s)!\n");
             exit(1);
         }
     }
+    
+    return variableCount;
 }
 
 void compileClassVarDeclaration(char *varType, FILE *inputFile, FILE *outputFile) {
@@ -248,20 +257,19 @@ void compileClassVarDeclaration(char *varType, FILE *inputFile, FILE *outputFile
     compileVarBody(inputFile, outputFile, newSymbol, class_symbols);
 }
 
-void compileVarDeclaration(FILE *inputFile, FILE *outputFile) {
+int compileVarDeclaration(FILE *inputFile, FILE *outputFile) {
     Symbol *newSymbol = malloc(sizeof(Symbol));
     char *kind = "var";
     newSymbol->kind = malloc(strlen(kind));
     strcpy(newSymbol->kind, kind);
     sub_symbols = add_symbol(sub_symbols, newSymbol);
     
-    compileVarBody(inputFile, outputFile, newSymbol, sub_symbols);
+    return compileVarBody(inputFile, outputFile, newSymbol, sub_symbols);
 }
 
-int compileParameterList(FILE *inputFile, FILE *outputFile) {
+void compileParameterList(FILE *inputFile, FILE *outputFile) {
     char line[256];
     
-    int count = 0;
     while (1) {
         fpos_t pos;
         fgetpos(inputFile, &pos);
@@ -273,8 +281,6 @@ int compileParameterList(FILE *inputFile, FILE *outputFile) {
             fsetpos(inputFile, &pos);
             break;
         } else {
-            count++;
-            
             Symbol *newSymbol = malloc(sizeof(Symbol));
             char *kind = "argument";
             newSymbol->kind = malloc(strlen(kind));
@@ -300,8 +306,6 @@ int compileParameterList(FILE *inputFile, FILE *outputFile) {
             }
         }
     }
-    
-    return count;
 }
 
 void compileExpression(FILE *inputFile, FILE *outputFile);
@@ -400,7 +404,11 @@ void compileTerm(FILE *inputFile, FILE *outputFile) {
             fprintf(outputFile, "push constant %s\n", line);
             break;
         case TokenTypeKeyword:
-            //TODO: not sure what to do here
+            if (!strcmp("true", line)) {
+                fputs("push constant 1\nneg\n", outputFile);
+            } else {
+                fputs("push constant 0\n", outputFile);
+            }
             break;
         case TokenTypeIdentifier:
         {
@@ -434,11 +442,12 @@ void compileTerm(FILE *inputFile, FILE *outputFile) {
                 fgets_nl(line, sizeof(line), inputFile);
                 
                 Symbol *symbol = symbolWithName(line);
-                if (symbol) {
-                    //TODO: not sure what to do
-                } else {
-                    //TODO: not sure what to do
+                if (!symbol) {
+                    printf("Variable '%s' could not be found in the symbol table!\n", line);
+                    exit(1);
                 }
+                
+                writeSymbol(outputFile, "push", symbol);
                 
                 fsetpos(inputFile, &pos);
             }
@@ -455,6 +464,9 @@ void compileTerm(FILE *inputFile, FILE *outputFile) {
                 }
             } else if (!strcmp(line, "-") || !strcmp(line, "~")) {
                 compileTerm(inputFile, outputFile);
+                
+                char *action = !strcmp(line, "-") ? "neg" : "not";
+                fprintf(outputFile, "%s\n", action);
             }
             break;
         default:
@@ -530,8 +542,7 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                     exit(1);
                 }
                 
-                char *kind = !strcmp(symbol->kind, "var") ? "local" : !strcmp(symbol->kind, "field") ? "this" : symbol->kind;
-                fprintf(outputFile, "push %s %d\n", kind, symbol->scope);
+                writeSymbol(outputFile, "push", symbol);
                 
                 fgets_nl(line, sizeof(line), inputFile);
                 if (!strcmp(line, "[")) {
@@ -559,7 +570,7 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                     exit(1);
                 }
                 
-                fprintf(outputFile, "pop %s %d\n", kind, symbol->scope);
+                writeSymbol(outputFile, "pop", symbol);
             } else if (!strcmp(line, "if")) {
                 fgets_nl(line, sizeof(line), inputFile);
                 if (strcmp(line, "(")) {
@@ -663,7 +674,7 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                 }
                 
                 fprintf(outputFile, "goto %s\n", label_1);
-                fprintf(outputFile, "label %s", label_2);
+                fprintf(outputFile, "label %s\n", label_2);
             } else if (!strcmp(line, "do")) {
                 compileSubroutineCall(inputFile, outputFile);
                 
@@ -703,7 +714,7 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
     }
 }
 
-void compileSubroutineBody(FILE *inputFile, FILE *outputFile) {
+void compileSubroutineBody(FILE *inputFile, FILE *outputFile, char *subType) {
     char line[256];
     
     fgets_nl(line, sizeof(line), inputFile);
@@ -711,21 +722,41 @@ void compileSubroutineBody(FILE *inputFile, FILE *outputFile) {
         printf("Subroutine Body should begin with '{'!\n");
         exit(1);
     }
-
+    
+    //compile local variables first
+    int varCount = 0;
     while (1) {
         fpos_t pos;
         fgetpos(inputFile, &pos);
         
         fgets_nl(line, sizeof(line), inputFile);
         if (!strcmp(line, "var")) {
-            compileVarDeclaration(inputFile, outputFile);
-        } else if (!strcmp(line, "}")) {
+            varCount += compileVarDeclaration(inputFile, outputFile);
+        } else {
+            fsetpos(inputFile, &pos);
+            break;
+        }
+    }
+    
+    fprintf(outputFile, "%d\n", varCount);
+    
+    if (!strcmp(subType, "method")) {
+        fputs("push argument 0\npop pointer 0\n", outputFile);
+    }
+
+    //compile statements
+    while (1) {
+        fpos_t pos;
+        fgetpos(inputFile, &pos);
+        
+        fgets_nl(line, sizeof(line), inputFile);
+        if (!strcmp(line, "}")) {
             break;
         } else if (!strcmp(line, "let") || !strcmp(line, "if") || !strcmp(line, "while") || !strcmp(line, "do") || !strcmp(line, "return")) {
             fsetpos(inputFile, &pos);
             compileStatements(inputFile, outputFile);
         } else {
-            printf("Unrecognized keyword specified in class!\n");
+            printf("Unrecognized statement in subroutine body!\n");
             exit(1);
         }
     }
@@ -741,7 +772,6 @@ void compileSubroutineDeclaration(char *subType, FILE *inputFile, FILE *outputFi
     fgets_nl(line, sizeof(line), inputFile);
     TokenType lineType = tokenType(line);
     if (lineType != TokenTypeIdentifier && strcmp(line, "int") && strcmp(line, "char") && strcmp(line, "boolean") && strcmp(line, "void")) {
-        //TODO: do i not need to know anything about return type??
         printf("Class subroutine declaration does not have a valid return type!\n");
         exit(1);
     }
@@ -760,12 +790,7 @@ void compileSubroutineDeclaration(char *subType, FILE *inputFile, FILE *outputFi
         exit(1);
     }
     
-    int argumentCount = compileParameterList(inputFile, outputFile);
-    fprintf(outputFile, "%d\n", argumentCount);
-    
-    if (!strcmp(subType, "method")) {
-        fputs("push argument 0\npop pointer 0\n", outputFile);
-    }
+    compileParameterList(inputFile, outputFile);
     
     fgets_nl(line, sizeof(line), inputFile);
     if (strcmp(line, ")")) {
@@ -773,7 +798,7 @@ void compileSubroutineDeclaration(char *subType, FILE *inputFile, FILE *outputFi
         exit(1);
     }
     
-    compileSubroutineBody(inputFile, outputFile);
+    compileSubroutineBody(inputFile, outputFile, subType);
 }
 
 void compileClass(FILE *inputFile, FILE *outputFile) {
@@ -807,6 +832,7 @@ void compileClass(FILE *inputFile, FILE *outputFile) {
             compileClassVarDeclaration(line, inputFile, outputFile);
         } else if (!strcmp(line, "constructor") || !strcmp(line, "function") || !strcmp(line, "method")) {
             compileSubroutineDeclaration(line, inputFile, outputFile);
+            fputc('\n', outputFile);
         } else if (!strcmp(line, "}")) {
             //do nothing
         } else {
