@@ -425,7 +425,7 @@ void compileTerm(FILE *inputFile, FILE *outputFile) {
         case TokenTypeKeyword:
             if (!strcmp("true", line)) {
                 fputs("push constant 1\nneg\n", outputFile);
-            } else if (!strcmp("false", line)) {
+            } else if (!strcmp("false", line) || !strcmp("null", line)) {
                 fputs("push constant 0\n", outputFile);
             } else if (!strcmp("this", line)) {
                 fputs("push pointer 0\n", outputFile);
@@ -440,8 +440,15 @@ void compileTerm(FILE *inputFile, FILE *outputFile) {
             fsetpos(inputFile, &initialTermPos); //TODO: this is weird and hacky
             if (!strcmp(line, "[")) {
                 fgets_nl(line, sizeof(line), inputFile);
-                fgets_nl(line, sizeof(line), inputFile);
+                Symbol *symbol = symbolWithName(line);
+                if (!symbol) {
+                    printf("Variable '%s' could not be found in the symbol table!\n", line);
+                    exit(1);
+                }
                 
+                writeSymbol(outputFile, "push", symbol);
+                
+                fgets_nl(line, sizeof(line), inputFile);
                 compileExpression(inputFile, outputFile);
                 
                 fgets_nl(line, sizeof(line), inputFile);
@@ -451,6 +458,7 @@ void compileTerm(FILE *inputFile, FILE *outputFile) {
                 }
                 
                 fputs("add\n", outputFile);
+                fputs("pop pointer 1\npush that 0\n", outputFile);
             } else if (!strcmp(line, "(") || !strcmp(line, ".")) {
                 compileSubroutineCall(inputFile, outputFile, 1);
             } else {
@@ -542,8 +550,8 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
             strcpy(statementType, line);
 
             if (!strcmp(line, "let")) {
-                Symbol *symbol = NULL;
                 fgets_nl(line, sizeof(line), inputFile);
+                Symbol *symbol = NULL;
                 if (tokenType(line) == TokenTypeIdentifier) {
                     symbol = symbolWithName(line);
                     if (!symbol) {
@@ -554,10 +562,16 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                     printf("Local var name must be of token type 'identifier'!\n");
                     exit(1);
                 }
-                
+
                 fgets_nl(line, sizeof(line), inputFile);
+                int offset = 0;
                 if (!strcmp(line, "[")) {
+                    offset = 1;
+                    writeSymbol(outputFile, "push", symbol);
+                    
                     compileExpression(inputFile, outputFile);
+                    
+                    fputs("add\n", outputFile);
                     
                     fgets_nl(line, sizeof(line), inputFile);
                     if (strcmp(line, "]")) {
@@ -574,14 +588,17 @@ void compileStatements(FILE *inputFile, FILE *outputFile) {
                 }
                 
                 compileExpression(inputFile, outputFile);
+                if (offset) {
+                    fputs("pop temp 0\npop pointer 1\npush temp 0\npop that 0\n", outputFile);
+                } else {
+                    writeSymbol(outputFile, "pop", symbol);
+                }
                 
                 fgets_nl(line, sizeof(line), inputFile);
                 if (strcmp(line, ";")) {
                     printf("Expected ';' at end of 'let' statement, not '%s'!\n", line);
                     exit(1);
                 }
-                
-                writeSymbol(outputFile, "pop", symbol);
             } else if (!strcmp(line, "if")) {
                 fgets_nl(line, sizeof(line), inputFile);
                 if (strcmp(line, "(")) {
